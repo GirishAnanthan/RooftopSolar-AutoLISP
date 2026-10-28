@@ -1,0 +1,83 @@
+========================================================================================
+            PHOTOVOLTAIC SYSTEM ENERGY YIELD & PERFORMANCE SIMULATION REPORT            
+========================================================================================
+Project Name           : Solar Rooftop Project
+Weather Resource Model : PVGIS (SARAH-2/ERA5)
+Site Coordinates       : Latitude 12.88° | Longitude 77.13°
+Rooftop Structure      : Metal Sheet Rooftop (Flush Mounted (Parallel to Roof))
+Sizing Mode            : Fill Polyline Boundary (Max Capacity)
+----------------------------------------------------------------------------------------
+
+1. EXECUTIVE SUMMARY & SYSTEM PRODUCTION METRICS:
+   - Total Nominal DC Capacity        : 193.73 kWp
+   - Total PV Module Count            : 315 units (Emmvee Energy E615HCBG132-T 615Wp)
+   - Inverter Configuration           : 4x Sungrow SG50CX (50kW AC) | DC:AC = 0.97
+   - Fall Safety Lifeline             : 0 m (0 Tensioner Anchors, 0 Turn Anchors)
+   - Safety Handrails                 : 0 m (0 Posts)
+   - Annual Global Incident (POA)     : 1893.3 kWh/m²
+   - Annual Specific Energy Yield     : 1620.7 kWh/kWp/year
+   - Overall Performance Ratio (PR)   : 85.6 %
+   - Capacity Utilization Factor (CUF): 18.5 %
+   - Year-1 Injected Energy Yield     : 313974.2 kWh/year
+   - 25-Year Cumulative Generation    : 7427373 kWh (~ 7427.4 MWh)
+   - Lifetime CO2 Emissions Offset    : ~ 6090.4 Metric Tons
+----------------------------------------------------------------------------------------
+
+2. MONTHLY ENERGY GENERATION & IRRADIANCE BALANCE TABLE:
++-------+----------+----------+---------+---------+-----------+--------------+--------+---------------+
+| Month |   GHI    |   POA    |  Tamb   |  Tcell  |  Thermal  | Energy Yield | System | Specific Prod |
+|       | (kWh/m²) | (kWh/m²) |  (°C)   |  (°C)   | Loss (%)  |    (kWh)     | PR (%) |   (kWh/kWp)   |
++-------+----------+----------+---------+---------+-----------+--------------+--------+---------------+
+| Jan   | 135.8    | 136.6    |  23.3   |  41.3   |   -4.7   |   22874     |  86.42 |     118.1     |
+| Feb   | 130.8    | 131.7    |  25.8   |  43.8   |   -5.42   |   21875     |  85.76 |     112.9     |
+| Mar   | 156.6    | 157.7    |  28.1   |  46.1   |   -6.1   |   26015     |  85.15 |     134.3     |
+| Apr   | 164.8    | 166.1    |  30.1   |  48.1   |   -6.68   |   27221     |  84.62 |     140.5     |
+| May   | 180.8    | 182.2    |  31   |  49   |   -6.93   |   29782     |  84.39 |     153.7     |
+| Jun   | 179.9    | 181.2    |  30.5   |  48.5   |   -6.79   |   29664     |  84.52 |     153.1     |
+| Jul   | 183.8    | 185.1    |  28.9   |  46.9   |   -6.32   |   30467     |  84.95 |     157.3     |
+| Aug   | 175    | 176.3    |  26.4   |  44.4   |   -5.6   |   29244     |  85.6 |     151     |
+| Sep   | 156.8    | 157.9    |  23.8   |  41.8   |   -4.85   |   26400     |  86.28 |     136.3     |
+| Oct   | 148.8    | 149.8    |  21.9   |  39.9   |   -4.29   |   25181     |  86.78 |     130     |
+| Nov   | 133.6    | 134.5    |  21   |  39   |   -4.05   |   22663     |  87.01 |     117     |
+| Dec   | 133.4    | 134.2    |  21.5   |  39.5   |   -4.19   |   22588     |  86.87 |     116.6     |
++-------+----------+----------+---------+---------+-----------+--------------+--------+---------------+
+| Total | 1880.2  | 1893.3  |  26.0*  |  44.0*  |   -6.70*  |   313974    |  85.6 |     1620.7   |
++-------+----------+----------+---------+---------+-----------+--------------+--------+---------------+
+
+3. 25-YEAR LIFETIME ANNUAL PRODUCTION & DEGRADATION SCHEDULE:
+   - Year  1 : 313974 kWh/yr | Cumul: 313.97 MWh | PR: 85.6 %
+   - Year  2 : 310834 kWh/yr | Cumul: 624.81 MWh | PR: 84.75 %
+   - Year  3 : 309579 kWh/yr | Cumul: 934.39 MWh | PR: 84.41 %
+   - Year  4 : 308323 kWh/yr | Cumul: 1242.71 MWh | PR: 84.06 %
+   - Year  5 : 307067 kWh/yr | Cumul: 1549.78 MWh | PR: 83.72 %
+   - Year  6 : 305811 kWh/yr | Cumul: 1855.59 MWh | PR: 83.38 %
+   - Year  7 : 304555 kWh/yr | Cumul: 2160.14 MWh | PR: 83.04 %
+   - Year  8 : 303299 kWh/yr | Cumul: 2463.44 MWh | PR: 82.69 %
+   - Year  9 : 302043 kWh/yr | Cumul: 2765.48 MWh | PR: 82.35 %
+   - Year 10 : 300787 kWh/yr | Cumul: 3066.27 MWh | PR: 82.01 %
+   - Year 11 : 299531 kWh/yr | Cumul: 3365.8 MWh | PR: 81.67 %
+   - Year 12 : 298275 kWh/yr | Cumul: 3664.08 MWh | PR: 81.32 %
+   - Year 13 : 297020 kWh/yr | Cumul: 3961.1 MWh | PR: 80.98 %
+   - Year 14 : 295764 kWh/yr | Cumul: 4256.86 MWh | PR: 80.64 %
+   - Year 15 : 294508 kWh/yr | Cumul: 4551.37 MWh | PR: 80.3 %
+   - Year 16 : 293252 kWh/yr | Cumul: 4844.62 MWh | PR: 79.95 %
+   - Year 17 : 291996 kWh/yr | Cumul: 5136.62 MWh | PR: 79.61 %
+   - Year 18 : 290740 kWh/yr | Cumul: 5427.36 MWh | PR: 79.27 %
+   - Year 19 : 289484 kWh/yr | Cumul: 5716.84 MWh | PR: 78.93 %
+   - Year 20 : 288228 kWh/yr | Cumul: 6005.07 MWh | PR: 78.58 %
+   - Year 21 : 286972 kWh/yr | Cumul: 6292.04 MWh | PR: 78.24 %
+   - Year 22 : 285717 kWh/yr | Cumul: 6577.76 MWh | PR: 77.9 %
+   - Year 23 : 284461 kWh/yr | Cumul: 6862.22 MWh | PR: 77.56 %
+   - Year 24 : 283205 kWh/yr | Cumul: 7145.42 MWh | PR: 77.22 %
+   - Year 25 : 281949 kWh/yr | Cumul: 7427.37 MWh | PR: 76.87 %
+
+4. FINANCIAL ROI, PAYBACK & COMMERCIAL METRICS:
+   - Grid Electricity Tariff          : $ 0.1 / kWh (Escalation: 3%/yr)
+   - Turnkey EPC System Cost          : $ 0.85 / Wp (Total CapEx: $ 164666)
+   - Year-1 Annual Electricity Savings: $ 31397 / year
+   - Simple Payback Period            : 5.5 Years
+   - 25-Year Cumulative Net Savings   : $ 1006841
+   - Levelized Cost of Energy (LCOE)  : $ 0.0281 / kWh
+   - Financial Return on Investment   : 511.4 % ROI
+========================================================================================
+
