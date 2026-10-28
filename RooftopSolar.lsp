@@ -89,6 +89,11 @@
       *PV_PAN_TEMP_COEFF*     -0.300
       *PV_PAN_TEMP_VOC*       -0.250
       *PV_PAN_TEMP_ISC*       0.045
+
+      ;; Temperature & Cable Derating Parameters
+      *PV_T_MIN_AMBIENT*      -10.0   ; Minimum ambient temp (°C) for Voc calculation
+      *PV_AMBIENT_TEMP*       45.0    ; Design ambient temp (°C) for cable derating
+      *PV_CABLES_IN_TRAY*     4       ; Number of DC cables in tray for grouping factor
       *PV_PAN_BIFACIAL*       0.80
       *PV_PAN_EFFICIENCY*     21.29
       *PV_PAN_CELLS*          144
@@ -160,6 +165,7 @@
       *PV_HANDRAIL_POST_SHAPE*    "Round Pipe" ; "Round Pipe" or "Square Pipe"
       *PV_HANDRAIL_RAIL_SHAPE*    "Round Pipe" ; "Round Pipe" or "Square Pipe"
       *PV_HANDRAIL_POST_SPACING*  1.50    ; meters (stanchion post spacing: 1.50m)
+      *PV_FALL_SAFETY_ANCHOR_SPACING*  5.0    ; meters (EN 795: 4.5-6m max spacing)
       *PV_HANDRAIL_POST_SIZE*     0.05    ; meters (50mm diameter / 50x50mm square)
       *PV_HANDRAIL_RAIL_SIZE*     0.04    ; meters (40mm diameter / 40x40mm square)
       *PV_HANDRAIL_TOEBOARD*      1       ; 1 = include 150mm kickplate/toeboard, 0 = no
@@ -176,10 +182,14 @@
 (defun dtr (d) (* pi (/ d 180.0)))
 (defun rtd (r) (* 180.0 (/ r pi)))
 
-(defun tan (a)
-  (if (equal (cos a) 0.0 1e-6)
-    1e6
-    (/ (sin a) (cos a))
+(defun tan (a / cos-val)
+  (setq cos-val (cos a))
+  (cond
+    ;; Near 90° or 270° - return large value with sign
+    ((< (abs cos-val) 1e-6)
+     (if (> (sin a) 0) 1e10 -1e10))
+    ;; Normal case
+    (t (/ (sin a) cos-val))
   )
 )
 
@@ -307,7 +317,13 @@
   (setq slant-len (+ (* table-rows mod-len-m) (* (max 0 (1- table-rows)) row-spacing)))
   (setq proj-len (* slant-len (cos tilt-rad)))
   (setq h-rise   (* slant-len (sin tilt-rad)))
-  (setq shadow-len (/ h-rise (tan sol-alt)))
+  ;; Guard: prevent division by zero when sun altitude is near 0°
+  (setq shadow-len
+    (if (< sol-alt (dtr 5.0))  ; Sun below 5° elevation
+      100.0  ; Use maximum practical shadow length
+      (/ h-rise (tan sol-alt))
+    )
+  )
   (setq pitch (+ proj-len (* shadow-len 1.10) 0.10))
   (max 1.50 (atof (rtos pitch 2 2)))
 )
@@ -1065,13 +1081,7 @@
 ;;; --------------------------------------------------------------------------
 ;;; Elevated Tilted Legs & Continuous Canopy Engine (Flat RCC)
 ;;; --------------------------------------------------------------------------
-(defun pv:tan (rad / c)
-  (setq c (cos rad))
-  (if (equal c 0.0 1e-7)
-    999999.0
-    (/ (sin rad) c)
-  )
-)
+;; pv:tan removed - use global tan() function instead
 
 (defun pv:get-elevated-plane-z (pt r-bbox / z-roof s minx miny maxx maxy x y h-min-clear tilt-rad dir)
   (setq z-roof (pv:get-roof-z pt r-bbox))
@@ -1929,10 +1939,10 @@
             (pv:draw-line-3d (list (car p1) (cadr p1) sz1) (list (car p2) (cadr p2) sz2) "PV_3D_SAFETY" 6)
             (pv:draw-line-3d (list (car p1) (cadr p1) (- sz1 0.15)) (list (car p1) (cadr p1) sz1) "PV_3D_SAFETY" 6)
             
-            ;; Insert intermediate rope guides if span > 8.0 meters
-            (if (> seg-len 8.0)
+            ;; Insert intermediate rope guides if span exceeds configured anchor spacing (EN 795: 4.5-6m)
+            (if (> seg-len *PV_FALL_SAFETY_ANCHOR_SPACING*)
               (progn
-                (setq num-inter (fix (/ seg-len 7.0)))
+                (setq num-inter (fix (/ seg-len *PV_FALL_SAFETY_ANCHOR_SPACING*)))
                 (setq j 1)
                 (while (<= j num-inter)
                   (setq frac (/ (float j) (float (1+ num-inter))))
@@ -2826,7 +2836,7 @@
             (setq avg-homerun (+ avg-homerun (distance (car *PV_CABLE_TRAY_PTS*) *PV_INVERTER_POS*)))
           )
           (setq total-dc-cable (* (length *PV_STRING_LIST*) 2.0 avg-homerun))
-          (setq v-drop (/ (* 2.0 avg-homerun *PV_PAN_IMP* 0.0185) 4.0))
+          (setq v-drop (/ (* 2.0 avg-homerun *PV_PAN_IMP* 0.0214) 4.0))
           (setq str-vmp (* *PV_STRING_SIZE* *PV_PAN_VMP*))
           (if (<= str-vmp 0.0) (setq str-vmp 800.0))
           (setq v-drop-pct (* (/ v-drop str-vmp) 100.0))
@@ -3525,7 +3535,7 @@
         (setq neg-len (+ (/ under-len 2.0) tray-len drop-len))
         (setq tot-len (+ pos-len neg-len))
         (setq total-dc-m (+ total-dc-m tot-len))
-        (setq v-drop-pct (* (/ (* 2.0 (+ tray-len drop-len) imp 0.0185) (* 4.0 vmp)) 100.0))
+        (setq v-drop-pct (* (/ (* 2.0 (+ tray-len drop-len) imp 0.0214) (* 4.0 vmp)) 100.0))
         (if fh
           (write-line (strcat str-id "," (itoa mods-cnt) "," (rtos vmp 2 1) "," (rtos imp 2 2) ","
                               (rtos under-len 2 1) "," (rtos tray-len 2 1) "," (rtos drop-len 2 1) ","
@@ -3573,25 +3583,112 @@
 )
 
 ;;; ==========================================================================
+;;; 2A. VOC TEMPERATURE CORRECTION (NEC 690.7 / IEC 60364-7-712)
+;;; ==========================================================================
+;;; Voc_max = Voc_STC × [1 + (T_coeff_Voc/100) × (T_min - 25)]
+(defun pv:calc-voc-max (/ t-min t-coeff-voc voc-max)
+  (setq t-min (if *PV_T_MIN_AMBIENT* *PV_T_MIN_AMBIENT* -10.0))  ; °C
+  (setq t-coeff-voc (if *PV_PAN_TEMP_VOC* *PV_PAN_TEMP_VOC* -0.25))  ; %/°C
+  ;; Calculate max Voc at coldest expected temperature
+  (setq voc-max (* *PV_PAN_VOC*
+                   (+ 1.0 (* (/ t-coeff-voc 100.0) (- t-min 25.0)))))
+  voc-max
+)
+
+;;; Check string Voc against inverter limit with temperature correction
+(defun pv:validate-string-voltage (/ vmp-str voc-max voc-str vmp-ok voc-ok msg)
+  (setq vmp-str (* *PV_STRING_SIZE* *PV_PAN_VMP*))
+  (setq voc-max (pv:calc-voc-max))
+  (setq voc-str (* *PV_STRING_SIZE* voc-max))
+
+  ;; Check against inverter limits
+  (setq vmp-ok (and (>= vmp-str *PV_INV_VMPP_MIN*)
+                    (<= vmp-str *PV_INV_VMPP_MAX*)))
+  (setq voc-ok (<= voc-str *PV_INV_VDC_MAX*))
+
+  ;; Generate warnings
+  (if (not vmp-ok)
+    (princ (strcat "\n[WARNING] String Vmp = " (rtos vmp-str 2 1)
+                  "V outside MPPT range [" (rtos *PV_INV_VMPP_MIN* 2 0)
+                  "V - " (rtos *PV_INV_VMPP_MAX* 2 0) "V]"))
+  )
+
+  (if (not voc-ok)
+    (princ (strcat "\n[FAIL] String Voc_max = " (rtos voc-str 2 1)
+                  "V EXCEEDS inverter max " (rtos *PV_INV_VDC_MAX* 2 0) "V"))
+  )
+
+  ;; Return t if valid, nil if not
+  (and vmp-ok voc-ok)
+)
+
+;;; ==========================================================================
 ;;; 2D. ELECTRICAL CABLE & APPARATUS SIZING (BS 7671 / IEC 60364-7-712)
 ;;; ==========================================================================
-(defun c:pv-cable-calc (/ str-cnt isc-mod req-amp calc-size v-drop-pct)
+(defun c:pv-cable-calc (/ str-cnt isc-mod base-current temp-factor grouping-factor total-factor req-amp calc-size v-drop-pct)
   (setq str-cnt (if *PV_STRING_LIST* (length *PV_STRING_LIST*) 10))
   (setq isc-mod (if (> *PV_PAN_ISC* 0.0) *PV_PAN_ISC* 13.5))
-  (setq req-amp (* isc-mod 1.25))
-  (setq calc-size (if (> req-amp 25.0) "6.0 sq.mm" "4.0 sq.mm"))
+
+  ;; Base current per NEC 690.8(A)(1)
+  (setq base-current (* isc-mod 1.25))
+
+  ;; Temperature derating per IEC 60364-5-52 Table B.52.14 (70°C cable, 45°C ambient)
+  (setq temp-factor
+    (cond
+      ((<= *PV_AMBIENT_TEMP* 30) 1.00)
+      ((<= *PV_AMBIENT_TEMP* 35) 0.96)
+      ((<= *PV_AMBIENT_TEMP* 40) 0.91)
+      ((<= *PV_AMBIENT_TEMP* 45) 0.87)
+      ((<= *PV_AMBIENT_TEMP* 50) 0.82)
+      ((<= *PV_AMBIENT_TEMP* 55) 0.76)
+      (t 0.71)  ; >55°C
+    )
+  )
+
+  ;; Grouping factor per IEC 60364-5-52 Table B.52.17 (single layer, touching)
+  (setq grouping-factor
+    (cond
+      ((<= *PV_CABLES_IN_TRAY* 3) 1.00)
+      ((<= *PV_CABLES_IN_TRAY* 6) 0.80)
+      ((<= *PV_CABLES_IN_TRAY* 9) 0.70)
+      (t 0.60)  ; >9 cables
+    )
+  )
+
+  ;; Total derating and required ampacity
+  (setq total-factor (* temp-factor grouping-factor))
+  (setq req-amp (/ base-current total-factor))
+
+  ;; Select cable size (typical ratings for 70°C XLPO solar cable)
+  (setq calc-size
+    (cond
+      ((<= req-amp 41)  "4.0 sq.mm")   ; 4mm² rated ~41A
+      ((<= req-amp 53)  "6.0 sq.mm")   ; 6mm² rated ~53A
+      ((<= req-amp 75)  "10.0 sq.mm")  ; 10mm² rated ~75A
+      ((<= req-amp 100) "16.0 sq.mm")  ; 16mm² rated ~100A
+      ((<= req-amp 126) "25.0 sq.mm")  ; 25mm² rated ~126A
+      (t "35.0 sq.mm")                 ; 35mm² rated ~154A
+    )
+  )
+
   (setq v-drop-pct (if (> *PV_VDROP_PERCENT* 0.0) *PV_VDROP_PERCENT* 0.95))
   (princ "\n=======================================================")
   (princ "\n [SolarPV] ELECTRICAL DC CABLE SIZING (IEC 60364-7-712 / BS 7671):")
   (princ (strcat "\n Module Isc @ STC          : " (rtos isc-mod 2 2) " A"))
-  (princ (strcat "\n Continuous Design Current : " (rtos req-amp 2 2) " A (1.25 x Isc)"))
-  (princ (strcat "\n Recommended DC Conductor : " calc-size " XLPO/Tinned Copper Solar Cable"))
-  (princ (strcat "\n DC Voltage Drop Check     : " (rtos v-drop-pct 2 2) "% " (if (< v-drop-pct 1.5) "[PASS < 1.5%]" "[HIGH - Use 6 sq.mm]")))
+  (princ (strcat "\n Continuous Design Current : " (rtos base-current 2 2) " A (1.25 x Isc)"))
+  (princ (strcat "\n Temperature Derating      : " (rtos temp-factor 2 2) "x (Ambient " (rtos *PV_AMBIENT_TEMP* 2 0) "°C)"))
+  (princ (strcat "\n Grouping Derating         : " (rtos grouping-factor 2 2) "x (" (itoa *PV_CABLES_IN_TRAY*) " cables)"))
+  (princ (strcat "\n Total Derating Factor     : " (rtos total-factor 2 2) "x"))
+  (princ (strcat "\n Required Ampacity         : " (rtos req-amp 2 2) " A"))
+  (princ (strcat "\n Recommended DC Conductor  : " calc-size " XLPO/Tinned Copper Solar Cable"))
+  (princ (strcat "\n DC Voltage Drop Check     : " (rtos v-drop-pct 2 2) "% " (if (< v-drop-pct 1.5) "[PASS < 1.5%]" "[HIGH - Use larger cable]")))
   (princ "\n Flame Retardant / UV Resistant: Halogen Free to EN 50618 (H1Z2Z2-K)")
   (princ "\n=======================================================")
-  (alert (strcat "DC Cable Sizing Report:\n\nDesign Current: " (rtos req-amp 2 2) " A (1.25 x Isc)"
+  (alert (strcat "DC Cable Sizing Report:\n\nBase Current: " (rtos base-current 2 2) " A (1.25 x Isc)"
+                 "\nDerating Factors: Temp=" (rtos temp-factor 2 2) " x Grouping=" (rtos grouping-factor 2 2) " = " (rtos total-factor 2 2)
+                 "\nRequired Ampacity: " (rtos req-amp 2 2) " A"
                  "\nRecommended Size: " calc-size " Tinned Copper"
-                 "\nVoltage Drop: " (rtos v-drop-pct 2 2) "% -> " 
+                 "\nVoltage Drop: " (rtos v-drop-pct 2 2) "% -> "
                  (if (< v-drop-pct 1.5) "PASS (< 1.5% Standard)" "WARNING: Exceeds 1.5%")))
   (princ)
 )
@@ -6382,14 +6479,16 @@
   (setq yr1-gen total-energy)
 
   ;; 25-Year Lifetime Production & Degradation Schedule
+  ;; Per IEC 61724-1: Year 1 = LID, Years 2-25 = annual degradation
   (setq deg-y1 (if (wcmatch (strcase *PV_PAN_TECH*) "*TOPCON*,*HJT*") 0.010 0.015))
   (setq deg-yr (if (wcmatch (strcase *PV_PAN_TECH*) "*TOPCON*,*HJT*") 0.0040 0.0050))
   (setq yr-list nil cum-gen 0.0 yr 1)
-  
+
   (while (<= yr 25)
     (if (= yr 1)
       (setq yr-gen yr1-gen)
-      (setq yr-gen (* yr1-gen (- 1.0 (+ deg-y1 (* deg-yr (- yr 2))))))
+      ;; Year 2: apply Year 1 LID only; Year 3+: apply LID + cumulative annual degradation
+      (setq yr-gen (* yr1-gen (- 1.0 (+ deg-y1 (* deg-yr (- yr 1))))))
     )
     (setq cum-gen (+ cum-gen yr-gen))
     (setq yr-list (cons (list yr yr-gen cum-gen (/ yr-gen plant-kw) (* overall-pr (/ yr-gen yr1-gen))) yr-list))
