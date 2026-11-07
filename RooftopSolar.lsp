@@ -90,9 +90,23 @@
       *PV_PAN_TEMP_VOC*       -0.250
       *PV_PAN_TEMP_ISC*       0.045
 
-      ;; Temperature & Cable Derating Parameters
-      *PV_T_MIN_AMBIENT*      -10.0   ; Minimum ambient temp (°C) for Voc calculation
-      *PV_AMBIENT_TEMP*       45.0    ; Design ambient temp (°C) for cable derating
+      ;; Temperature & Cable Derating Parameters (Indian Climate Settings)
+      *PV_T_MIN_AMBIENT*      8.0     ; Minimum winter ambient temp (°C) for Voc calculation in India (8°C)
+      *PV_AMBIENT_TEMP*       45.0    ; Peak summer ambient temp (°C) for cable derating in India
+      *PV_TEMP_MIN*           8.0     ; Realistic winter min temp (°C) for Indian conditions
+      *PV_TEMP_MAX_CELL*      75.0    ; Peak summer cell operating temp (°C) for MPPT check
+
+      ;; Indian Regulatory, DISCOM & Statutory Standards (IS / CEA / MNRE)
+      *PV_SANCTIONED_LOAD*    25.0    ; kW (Consumer Sanctioned Load for Net-Metering)
+      *PV_CONTRACT_DEMAND*    28.0    ; kVA (Contract Demand)
+      *PV_GRID_VOLTAGE*       "415V 3-Phase 50Hz" ; DISCOM Supply Voltage
+      *PV_WIND_ZONE*          "Zone III (44 m/s)" ; IS 875 Part 3 Basic Wind Speed Zone
+      *PV_EARTHING_PITS*      nil     ; List of placed earth pits ((pt "DC") (pt "AC") (pt "LA"))
+      *PV_LIGHTNING_MAST*     nil     ; List of (pt radius type mast-ht)
+      *PV_PM_SURYA_GHAR*      1       ; 1 = Enable PM Surya Ghar Subsidy Calc
+      *PV_SUBSIDY_RS*         78000.0 ; PM Surya Ghar Central Subsidy (INR)
+      *PV_COMMERCIAL_AD*      0       ; 1 = 40% Accelerated Depreciation for Commercial/Industrial
+      *PV_GST_RATE*           13.8    ; % Blended GST (5% modules + 18% services)
       *PV_CABLES_IN_TRAY*     4       ; Number of DC cables in tray for grouping factor
       *PV_PAN_BIFACIAL*       0.80
       *PV_PAN_EFFICIENCY*     21.29
@@ -251,6 +265,9 @@
   (pv:make-layer "PV_INVERTER"    4 "Continuous")  ; Cyan (0.50mm lineweight)
   (pv:make-layer "PV_CABLE_TRAY"  30 "Continuous") ; Orange (0.35mm lineweight)
   (pv:make-layer "PV_SLD"         7 "Continuous")  ; White
+  (pv:make-layer "PV_EARTHING"    3 "Continuous")  ; Green (IS 3043 Chemical Earth Pits & 25x3mm Strip)
+  (pv:make-layer "PV_LIGHTNING"   6 "DASHED")      ; Magenta (IS/IEC 62305 LA Mast & Protection Cone)
+  (pv:make-layer "PV_ELECTRICAL"  4 "Continuous")  ; Cyan (AJB/DCDB, ACDB, DISCOM GOS Switch)
   (pv:make-layer "PV_3D_MODULES"      140 "Continuous"); Slate Blue
   (pv:make-layer "PV_3D_STRUCTURE"    8 "Continuous")  ; Dark Gray / Metallic
   (pv:make-layer "PV_3D_OBSTACLES"    1 "Continuous")  ; Red
@@ -1316,6 +1333,22 @@
 )
 
 ;;; ==========================================================================
+
+;;; --------------------------------------------------------------------------
+;;; Shared Key-Value Record Helper (Unified replacement for local get-f / get-val)
+;;; --------------------------------------------------------------------------
+(defun pv:get-rec-field (rec key default-val / ukey res)
+  (setq ukey (strcase key) res nil)
+  (if rec
+    (foreach pair rec
+      (if (and (null res) (listp pair) (= (strcase (vl-princ-to-string (car pair))) ukey))
+        (setq res (cdr pair))
+      )
+    )
+  )
+  (if res res default-val)
+)
+
 ;;; PVCompLib - Persistent Component Library Manager (.PAN & .OND)
 ;;; Automatically saves and syncs loaded modules and inverters into PVCompLib.lsp
 ;;; located within the same folder from where the LISP file is loaded.
@@ -1494,6 +1527,78 @@
 (defun pv:init-module-db ()
   (setq *PV_MODULE_LIBRARY*
     (list
+      ;; INOX Solar TOPCon Bifacial NDCR Modules (G12R 132-Cell Series)
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 132 NG12R 615Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "615.0") (cons "LENGTH" "2.382")
+            (cons "WIDTH" "1.134") (cons "VMP" "40.96") (cons "IMP" "15.03") (cons "VOC" "49.05")
+            (cons "ISC" "15.86") (cons "MUPMP" "-0.290") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "22.77") (cons "BIFACIAL" "0.80") (cons "CELLS" "132") (cons "WEIGHT" "33.0"))
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 132 NG12R 620Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "620.0") (cons "LENGTH" "2.382")
+            (cons "WIDTH" "1.134") (cons "VMP" "41.05") (cons "IMP" "15.12") (cons "VOC" "49.15")
+            (cons "ISC" "15.96") (cons "MUPMP" "-0.290") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "22.95") (cons "BIFACIAL" "0.80") (cons "CELLS" "132") (cons "WEIGHT" "33.0"))
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 132 NG12R 625Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "625.0") (cons "LENGTH" "2.382")
+            (cons "WIDTH" "1.134") (cons "VMP" "41.14") (cons "IMP" "15.21") (cons "VOC" "49.25")
+            (cons "ISC" "16.06") (cons "MUPMP" "-0.290") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "23.14") (cons "BIFACIAL" "0.80") (cons "CELLS" "132") (cons "WEIGHT" "33.0"))
+
+      ;; INOX Solar TOPCon Bifacial NDCR Modules (M10R 144-Cell Series)
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 144 NM10R 580Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "580.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "44.01") (cons "IMP" "13.18") (cons "VOC" "52.60")
+            (cons "ISC" "13.93") (cons "MUPMP" "-0.300") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "22.45") (cons "BIFACIAL" "0.80") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 144 NM10R 585Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "585.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "44.20") (cons "IMP" "13.24") (cons "VOC" "52.80")
+            (cons "ISC" "13.97") (cons "MUPMP" "-0.300") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "22.65") (cons "BIFACIAL" "0.80") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 144 NM10R 590Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "590.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "44.40") (cons "IMP" "13.29") (cons "VOC" "53.00")
+            (cons "ISC" "14.04") (cons "MUPMP" "-0.300") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "22.84") (cons "BIFACIAL" "0.80") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
+      (list (cons "MANUFACTURER" "INOX Solar") (cons "MODEL" "ISL 144 NM10R 595Wp")
+            (cons "TECHNOL" "TOPCon Bifacial NDCR") (cons "WP" "595.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "44.60") (cons "IMP" "13.34") (cons "VOC" "53.20")
+            (cons "ISC" "14.10") (cons "MUPMP" "-0.300") (cons "MUVOC" "-0.250") (cons "MUISC" "0.045")
+            (cons "EFF" "23.03") (cons "BIFACIAL" "0.80") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
+
+      ;; Top ALMM Indian Tier-1 Manufacturers
+      (list (cons "MANUFACTURER" "Waaree Energies") (cons "MODEL" "BiN-08-580 M10")
+            (cons "TECHNOL" "TOPCon Bifacial") (cons "WP" "580.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "44.01") (cons "IMP" "13.18") (cons "VOC" "52.50")
+            (cons "ISC" "13.93") (cons "MUPMP" "-0.300") (cons "MUVOC" "-0.260") (cons "MUISC" "0.048")
+            (cons "EFF" "21.46") (cons "BIFACIAL" "0.80") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
+      (list (cons "MANUFACTURER" "Vikram Solar") (cons "MODEL" "SOMERA VSMDH.72.550.05")
+            (cons "TECHNOL" "Mono PERC 144") (cons "WP" "550.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "41.80") (cons "IMP" "13.16") (cons "VOC" "49.80")
+            (cons "ISC" "13.98") (cons "MUPMP" "-0.350") (cons "MUVOC" "-0.280") (cons "MUISC" "0.048")
+            (cons "EFF" "21.28") (cons "BIFACIAL" "0.70") (cons "CELLS" "144") (cons "WEIGHT" "28.3"))
+      (list (cons "MANUFACTURER" "Tata Power Solar") (cons "MODEL" "TP545M10-144")
+            (cons "TECHNOL" "Mono PERC 144") (cons "WP" "545.0") (cons "LENGTH" "2.278")
+            (cons "WIDTH" "1.134") (cons "VMP" "41.65") (cons "IMP" "13.09") (cons "VOC" "49.60")
+            (cons "ISC" "13.91") (cons "MUPMP" "-0.350") (cons "MUVOC" "-0.280") (cons "MUISC" "0.048")
+            (cons "EFF" "21.10") (cons "BIFACIAL" "0.70") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
+      (list (cons "MANUFACTURER" "Adani Solar") (cons "MODEL" "Elan Shine Dual Glass 540")
+            (cons "TECHNOL" "Bifacial Mono PERC") (cons "WP" "540.0") (cons "LENGTH" "2.274")
+            (cons "WIDTH" "1.134") (cons "VMP" "41.50") (cons "IMP" "13.02") (cons "VOC" "49.40")
+            (cons "ISC" "13.85") (cons "MUPMP" "-0.350") (cons "MUVOC" "-0.280") (cons "MUISC" "0.048")
+            (cons "EFF" "20.94") (cons "BIFACIAL" "0.70") (cons "CELLS" "144") (cons "WEIGHT" "28.0"))
+      (list (cons "MANUFACTURER" "RenewSys") (cons "MODEL" "DESERV EXTREME-595")
+            (cons "TECHNOL" "Mono PERC 144") (cons "WP" "595.0") (cons "LENGTH" "2.277")
+            (cons "WIDTH" "1.133") (cons "VMP" "43.46") (cons "IMP" "13.70") (cons "VOC" "52.82")
+            (cons "ISC" "14.35") (cons "MUPMP" "-0.320") (cons "MUVOC" "-0.289") (cons "MUISC" "0.048")
+            (cons "EFF" "21.15") (cons "BIFACIAL" "0.70") (cons "CELLS" "144") (cons "WEIGHT" "29.0"))
+      (list (cons "MANUFACTURER" "Emmvee Energy") (cons "MODEL" "E615HCBG132-T")
+            (cons "TECHNOL" "Bifacial TOPCon") (cons "WP" "615.0") (cons "LENGTH" "2.382")
+            (cons "WIDTH" "1.134") (cons "VMP" "40.69") (cons "IMP" "15.13") (cons "VOC" "49.01")
+            (cons "ISC" "15.96") (cons "MUPMP" "-0.289") (cons "MUVOC" "-0.224") (cons "MUISC" "0.045")
+            (cons "EFF" "21.70") (cons "BIFACIAL" "0.80") (cons "CELLS" "132") (cons "WEIGHT" "31.0"))
+
+      ;; Global Reference Tier-1
       (list (cons "MANUFACTURER" "JinkoSolar") (cons "MODEL" "Tiger Neo JKM550N-72HL4-V")
             (cons "TECHNOL" "N-Type TOPCon") (cons "WP" "550.0") (cons "LENGTH" "2.278")
             (cons "WIDTH" "1.134") (cons "VMP" "41.42") (cons "IMP" "13.28") (cons "VOC" "50.25")
@@ -1509,52 +1614,33 @@
             (cons "WIDTH" "1.134") (cons "VMP" "38.20") (cons "IMP" "14.40") (cons "VOC" "45.80")
             (cons "ISC" "15.35") (cons "MUPMP" "-0.340") (cons "MUVOC" "-0.270") (cons "MUISC" "0.045")
             (cons "EFF" "21.30") (cons "BIFACIAL" "0.00") (cons "CELLS" "132") (cons "WEIGHT" "28.2"))
-      (list (cons "MANUFACTURER" "RenewSys") (cons "MODEL" "DESERV EXTREME-595")
-            (cons "TECHNOL" "Mono PERC 144") (cons "WP" "595.0") (cons "LENGTH" "2.277")
-            (cons "WIDTH" "1.133") (cons "VMP" "43.46") (cons "IMP" "13.70") (cons "VOC" "52.82")
-            (cons "ISC" "14.35") (cons "MUPMP" "-0.320") (cons "MUVOC" "-0.289") (cons "MUISC" "0.048")
-            (cons "EFF" "21.15") (cons "BIFACIAL" "0.70") (cons "CELLS" "144") (cons "WEIGHT" "29.0"))
-      (list (cons "MANUFACTURER" "Emmvee Energy") (cons "MODEL" "E615HCBG132-T")
-            (cons "TECHNOL" "Bifacial TOPCon") (cons "WP" "615.0") (cons "LENGTH" "2.382")
-            (cons "WIDTH" "1.134") (cons "VMP" "40.69") (cons "IMP" "15.13") (cons "VOC" "49.01")
-            (cons "ISC" "15.96") (cons "MUPMP" "-0.289") (cons "MUVOC" "-0.224") (cons "MUISC" "0.045")
-            (cons "EFF" "21.70") (cons "BIFACIAL" "0.80") (cons "CELLS" "132") (cons "WEIGHT" "31.0"))
-      (list (cons "MANUFACTURER" "Waaree Energies") (cons "MODEL" "BiN-08-580 M10")
-            (cons "TECHNOL" "TOPCon Bifacial") (cons "WP" "580.0") (cons "LENGTH" "2.278")
-            (cons "WIDTH" "1.134") (cons "VMP" "44.01") (cons "IMP" "13.18") (cons "VOC" "52.50")
-            (cons "ISC" "13.93") (cons "MUPMP" "-0.300") (cons "MUVOC" "-0.260") (cons "MUISC" "0.048")
-            (cons "EFF" "21.46") (cons "BIFACIAL" "0.80") (cons "CELLS" "144") (cons "WEIGHT" "28.5"))
     )
   )
   (pv:complib-load)
 )
 
-(defun pv:select-module-by-index (idx / mod-rec get-f)
+(defun pv:select-module-by-index (idx / mod-rec)
   (if (null *PV_MODULE_LIBRARY*) (pv:init-module-db))
   (if (or (< idx 0) (>= idx (length *PV_MODULE_LIBRARY*))) (setq idx 0))
   (setq *PV_ACTIVE_MODULE_IDX* idx)
   (setq mod-rec (nth idx *PV_MODULE_LIBRARY*))
-  
-  (defun get-f (k def)
-    (if (assoc k mod-rec) (cdr (assoc k mod-rec)) def)
-  )
-  (setq *PV_PAN_MFG*        (get-f "MANUFACTURER" "Generic")
-        *PV_PAN_MODEL*      (get-f "MODEL" "550W Module")
-        *PV_PAN_TECH*       (get-f "TECHNOL" "Mono PERC")
-        *PV_MOD_WATT*       (atof (get-f "WP" "550.0"))
-        *PV_MOD_LEN*        (atof (get-f "LENGTH" "2.278"))
-        *PV_MOD_WID*        (atof (get-f "WIDTH" "1.134"))
-        *PV_PAN_VMP*        (atof (get-f "VMP" "41.42"))
-        *PV_PAN_IMP*        (atof (get-f "IMP" "13.28"))
-        *PV_PAN_VOC*        (atof (get-f "VOC" "50.25"))
-        *PV_PAN_ISC*        (atof (get-f "ISC" "14.03"))
-        *PV_PAN_TEMP_COEFF* (atof (get-f "MUPMP" "-0.300"))
-        *PV_PAN_TEMP_VOC*   (atof (get-f "MUVOC" "-0.250"))
-        *PV_PAN_TEMP_ISC*   (atof (get-f "MUISC" "0.045"))
-        *PV_PAN_EFFICIENCY* (atof (get-f "EFF" "21.29"))
-        *PV_PAN_BIFACIAL*   (atof (get-f "BIFACIAL" "0.80"))
-        *PV_PAN_CELLS*      (atoi (get-f "CELLS" "144"))
-        *PV_PAN_WEIGHT*     (atof (get-f "WEIGHT" "28.0"))
+  (setq *PV_PAN_MFG*        (pv:get-rec-field mod-rec "MANUFACTURER" "Generic")
+        *PV_PAN_MODEL*      (pv:get-rec-field mod-rec "MODEL" "550W Module")
+        *PV_PAN_TECH*       (pv:get-rec-field mod-rec "TECHNOL" "Mono PERC")
+        *PV_MOD_WATT*       (atof (pv:get-rec-field mod-rec "WP" "550.0"))
+        *PV_MOD_LEN*        (atof (pv:get-rec-field mod-rec "LENGTH" "2.278"))
+        *PV_MOD_WID*        (atof (pv:get-rec-field mod-rec "WIDTH" "1.134"))
+        *PV_PAN_VMP*        (atof (pv:get-rec-field mod-rec "VMP" "41.42"))
+        *PV_PAN_IMP*        (atof (pv:get-rec-field mod-rec "IMP" "13.28"))
+        *PV_PAN_VOC*        (atof (pv:get-rec-field mod-rec "VOC" "50.25"))
+        *PV_PAN_ISC*        (atof (pv:get-rec-field mod-rec "ISC" "14.03"))
+        *PV_PAN_TEMP_COEFF* (atof (pv:get-rec-field mod-rec "MUPMP" "-0.300"))
+        *PV_PAN_TEMP_VOC*   (atof (pv:get-rec-field mod-rec "MUVOC" "-0.250"))
+        *PV_PAN_TEMP_ISC*   (atof (pv:get-rec-field mod-rec "MUISC" "0.045"))
+        *PV_PAN_EFFICIENCY* (atof (pv:get-rec-field mod-rec "EFF" "21.29"))
+        *PV_PAN_BIFACIAL*   (atof (pv:get-rec-field mod-rec "BIFACIAL" "0.80"))
+        *PV_PAN_CELLS*      (atoi (pv:get-rec-field mod-rec "CELLS" "144"))
+        *PV_PAN_WEIGHT*     (atof (pv:get-rec-field mod-rec "WEIGHT" "28.0"))
         *PV_PAN_LOADED*     t)
 )
 
@@ -1562,37 +1648,35 @@
   (setq data (pv:parse-key-value-file filepath))
   (if data
     (progn
-      (defun get-val (k def-val / item)
-        (if (setq item (assoc (strcase k) data)) (cdr item) def-val)
-      )
-      (setq mfg    (get-val "MANUFACTURER" "Generic Tier-1"))
-      (setq model  (get-val "MODEL" (vl-filename-base filepath)))
-      (setq tech   (get-val "TECHNOL" "Mono PERC"))
-      (setq pnom   (atof (get-val "PNOM" (get-val "PMAX" (get-val "WP" "550.0")))))
+
+      (setq mfg    (pv:get-rec-field data "MANUFACTURER" "Generic Tier-1"))
+      (setq model  (pv:get-rec-field data "MODEL" (vl-filename-base filepath)))
+      (setq tech   (pv:get-rec-field data "TECHNOL" "Mono PERC"))
+      (setq pnom   (atof (pv:get-rec-field data "PNOM" (pv:get-rec-field data "PMAX" (pv:get-rec-field data "WP" "550.0")))))
       (if (<= pnom 0.0) (setq pnom 550.0))
       
-      (setq vmp (atof (get-val "VMPP" (get-val "VMAX" "41.95"))))
-      (setq imp (atof (get-val "IMPP" (get-val "IMAX" "13.12"))))
-      (setq voc (atof (get-val "VOC" "49.80")))
-      (setq isc (atof (get-val "ISC" "13.98")))
+      (setq vmp (atof (pv:get-rec-field data "VMPP" (pv:get-rec-field data "VMAX" "41.95"))))
+      (setq imp (atof (pv:get-rec-field data "IMPP" (pv:get-rec-field data "IMAX" "13.12"))))
+      (setq voc (atof (pv:get-rec-field data "VOC" "49.80")))
+      (setq isc (atof (pv:get-rec-field data "ISC" "13.98")))
       
-      (setq mu-pmp (atof (get-val "MUPMPREQ" (get-val "MUPNOM" (get-val "GAMMA_PMP" "-0.35")))))
+      (setq mu-pmp (atof (pv:get-rec-field data "MUPMPREQ" (pv:get-rec-field data "MUPNOM" (pv:get-rec-field data "GAMMA_PMP" "-0.35")))))
       (if (< mu-pmp -1.0) (setq mu-pmp (/ (* mu-pmp 100.0) pnom)))
-      (setq mu-voc (atof (get-val "MUVOC" "-0.28")))
-      (setq mu-isc (atof (get-val "MUISC" "0.048")))
+      (setq mu-voc (atof (pv:get-rec-field data "MUVOC" "-0.28")))
+      (setq mu-isc (atof (pv:get-rec-field data "MUISC" "0.048")))
       
-      (setq len (atof (get-val "LENGTH" (get-val "HEIGHT" "2.278"))))
-      (setq wid (atof (get-val "WIDTH" "1.134")))
-      (setq dep (atof (get-val "DEPTH" (get-val "THICKNESS" "0.035"))))
+      (setq len (atof (pv:get-rec-field data "LENGTH" (pv:get-rec-field data "HEIGHT" "2.278"))))
+      (setq wid (atof (pv:get-rec-field data "WIDTH" "1.134")))
+      (setq dep (atof (pv:get-rec-field data "DEPTH" (pv:get-rec-field data "THICKNESS" "0.035"))))
       (if (> len 10.0) (setq len (/ len 1000.0)))
       (if (> wid 10.0) (setq wid (/ wid 1000.0)))
       (if (> dep 10.0) (setq dep (/ dep 1000.0)))
       (if (<= len 0.1) (setq len 2.278))
       (if (<= wid 0.1) (setq wid 1.134))
       
-      (setq wt    (atof (get-val "WEIGHT" "28.5")))
-      (setq cells (atoi (get-val "NCELS" "144")))
-      (setq bif   (atof (get-val "BIFACIALITY" "0.70")))
+      (setq wt    (atof (pv:get-rec-field data "WEIGHT" "28.5")))
+      (setq cells (atoi (pv:get-rec-field data "NCELS" "144")))
+      (setq bif   (atof (pv:get-rec-field data "BIFACIALITY" "0.70")))
       (if (> bif 1.0) (setq bif (/ bif 100.0)))
       
       (setq eff (if (> (* len wid) 0.0) (* (/ pnom (* len wid 1000.0)) 100.0) 21.3))
@@ -1677,50 +1761,44 @@
   (pv:complib-load)
 )
 
-(defun pv:select-inverter-by-index (idx / inv-rec get-f)
+(defun pv:select-inverter-by-index (idx / inv-rec)
   (if (null *PV_INVERTER_LIBRARY*) (pv:init-inverter-db))
   (if (or (< idx 0) (>= idx (length *PV_INVERTER_LIBRARY*))) (setq idx 0))
   (setq *PV_ACTIVE_INVERTER_IDX* idx)
   (setq inv-rec (nth idx *PV_INVERTER_LIBRARY*))
-  
-  (defun get-f (k def)
-    (if (assoc k inv-rec) (cdr (assoc k inv-rec)) def)
-  )
-  (setq *PV_INV_MFG*        (get-f "MANUFACTURER" "Sungrow")
-        *PV_INV_MODEL*      (get-f "MODEL" "SG50CX")
-        *PV_INV_KW*         (atof (get-f "KW" "50.0"))
-        *PV_INV_VDC_MAX*    (atof (get-f "VDC_MAX" "1000.0"))
-        *PV_INV_VMPP_MIN*   (atof (get-f "VMPP_MIN" "200.0"))
-        *PV_INV_VMPP_MAX*   (atof (get-f "VMPP_MAX" "960.0"))
-        *PV_INV_IMAX_DC*    (atof (get-f "IMAX_DC" "100.0"))
-        *PV_INV_MPPT_COUNT* (atoi (get-f "MPPT" "5"))
-        *PV_INV_INPUTS*     (atoi (get-f "INPUTS" "10"))
-        *PV_INV_EFF_EURO*   (atof (get-f "EFF_EURO" "98.5"))
-        *PV_INV_EFF_MAX*    (atof (get-f "EFF_MAX" "98.7"))
-        *PV_INV_WEIGHT*     (atof (get-f "WEIGHT" "62.0")))
+  (setq *PV_INV_MFG*        (pv:get-rec-field inv-rec "MANUFACTURER" "Sungrow")
+        *PV_INV_MODEL*      (pv:get-rec-field inv-rec "MODEL" "SG50CX")
+        *PV_INV_KW*         (atof (pv:get-rec-field inv-rec "KW" "50.0"))
+        *PV_INV_VDC_MAX*    (atof (pv:get-rec-field inv-rec "VDC_MAX" "1000.0"))
+        *PV_INV_VMPP_MIN*   (atof (pv:get-rec-field inv-rec "VMPP_MIN" "200.0"))
+        *PV_INV_VMPP_MAX*   (atof (pv:get-rec-field inv-rec "VMPP_MAX" "960.0"))
+        *PV_INV_IMAX_DC*    (atof (pv:get-rec-field inv-rec "IMAX_DC" "100.0"))
+        *PV_INV_MPPT_COUNT* (atoi (pv:get-rec-field inv-rec "MPPT" "5"))
+        *PV_INV_INPUTS*     (atoi (pv:get-rec-field inv-rec "INPUTS" "10"))
+        *PV_INV_EFF_EURO*   (atof (pv:get-rec-field inv-rec "EFF_EURO" "98.5"))
+        *PV_INV_EFF_MAX*    (atof (pv:get-rec-field inv-rec "EFF_MAX" "98.7"))
+        *PV_INV_WEIGHT*     (atof (pv:get-rec-field inv-rec "WEIGHT" "62.0")))
 )
 
 (defun pv:load-ond-file (filepath / data get-val mfg model kw vdc-max vmpp-min vmpp-max imax mppt inputs eff-euro eff-max wt new-rec)
   (setq data (pv:parse-key-value-file filepath))
   (if data
     (progn
-      (defun get-val (k def-val / item)
-        (if (setq item (assoc (strcase k) data)) (cdr item) def-val)
-      )
-      (setq mfg      (get-val "MANUFACTURER" "Generic Inverter"))
-      (setq model    (get-val "MODEL" (vl-filename-base filepath)))
-      (setq kw       (atof (get-val "PNOM" (get-val "PNOMAPP" (get-val "PMAX" "50.0")))))
+
+      (setq mfg      (pv:get-rec-field data "MANUFACTURER" "Generic Inverter"))
+      (setq model    (pv:get-rec-field data "MODEL" (vl-filename-base filepath)))
+      (setq kw       (atof (pv:get-rec-field data "PNOM" (pv:get-rec-field data "PNOMAPP" (pv:get-rec-field data "PMAX" "50.0")))))
       (if (<= kw 0.0) (setq kw 50.0))
       
-      (setq vdc-max  (atof (get-val "VMAX" (get-val "VABSMAX" "1000.0"))))
-      (setq vmpp-min (atof (get-val "VMPPMIN" (get-val "VMIN" "200.0"))))
-      (setq vmpp-max (atof (get-val "VMPPMAX" "960.0")))
-      (setq imax     (atof (get-val "IMAXDC" (get-val "IMAX" "100.0"))))
-      (setq mppt     (atoi (get-val "NBMPPT" "5")))
-      (setq inputs   (atoi (get-val "NBINPUTS" (itoa (* mppt 2)))))
-      (setq eff-euro (atof (get-val "EFFEURO" "98.5")))
-      (setq eff-max  (atof (get-val "EFFMAX" "98.7")))
-      (setq wt       (atof (get-val "WEIGHT" "60.0")))
+      (setq vdc-max  (atof (pv:get-rec-field data "VMAX" (pv:get-rec-field data "VABSMAX" "1000.0"))))
+      (setq vmpp-min (atof (pv:get-rec-field data "VMPPMIN" (pv:get-rec-field data "VMIN" "200.0"))))
+      (setq vmpp-max (atof (pv:get-rec-field data "VMPPMAX" "960.0")))
+      (setq imax     (atof (pv:get-rec-field data "IMAXDC" (pv:get-rec-field data "IMAX" "100.0"))))
+      (setq mppt     (atoi (pv:get-rec-field data "NBMPPT" "5")))
+      (setq inputs   (atoi (pv:get-rec-field data "NBINPUTS" (itoa (* mppt 2)))))
+      (setq eff-euro (atof (pv:get-rec-field data "EFFEURO" "98.5")))
+      (setq eff-max  (atof (pv:get-rec-field data "EFFMAX" "98.7")))
+      (setq wt       (atof (pv:get-rec-field data "WEIGHT" "60.0")))
       
       (setq new-rec
         (list
@@ -2230,8 +2308,22 @@
 )
 
 ;;; Interactive Handrail Command
-(defun c:pv-handrail (/ p-start pts p-cur p-prev tot-len i cfg-ans ht-in num-in post-shape-in rail-shape-in)
+(defun c:pv-handrail (/ p-start pts p-cur p-prev tot-len i cfg-ans ht-in num-in post-shape-in rail-shape-in ht-valid)
   (pv:init-layers)
+
+  ;; Validate handrail height per OSHA 1910.29 (0.90m min, 1.20m max recommended)
+  (setq ht-valid t)
+  (cond
+    ((< *PV_HANDRAIL_HEIGHT* 0.90)
+     (princ "\n[WARNING] Handrail height < 0.90m violates OSHA 1910.29 minimum!")
+     (princ "\n[WARNING] Setting to minimum 0.90m")
+     (setq *PV_HANDRAIL_HEIGHT* 0.90)
+    )
+    ((> *PV_HANDRAIL_HEIGHT* 1.20)
+     (princ "\n[INFO] Handrail height > 1.20m may require special approval per local codes.")
+    )
+  )
+
   (princ "\n==========================================================================")
   (princ "\n[SolarPV] ROOFTOP SAFETY HANDRAILS / GUARDRAILS GENERATOR (3D & Plan)")
   (princ "\nPick points along roof perimeter or walkway edge to place safety handrails.")
@@ -2365,8 +2457,7 @@
   (princ)
 )
 
-(defun c:PVCLEARHANDRAIL () (c:pv-clear-handrails))
-(defun c:PVCLEARHANDRAILS () (c:pv-clear-handrails))
+;; Note: PVCLEARHANDRAIL alias defined in Command Dispatchers group
 
 ;;; Models a 3D obstacle sitting directly on the rooftop surface at Z_roof
 (defun pv:model-3d-obstacle (ent ht pts r-bbox / obbox ox1 ox2 oy1 oy2 xc yc zb zt)
@@ -3724,6 +3815,298 @@
 )
 
 ;;; ==========================================================================
+
+;;; ==========================================================================
+;;; INDIA ROOFTOP SOLAR ENGINEERING MODULE (IS 3043, IS 875, IS/IEC 62305, CEA)
+;;; ==========================================================================
+
+;;; --------------------------------------------------------------------------
+;;; IS 875 (Part 3) Wind Load & Ballast / Anchor Force Calculation
+;;; --------------------------------------------------------------------------
+(defun pv:calc-wind-load (/ vb p-wind ballast-kg)
+  (setq vb
+    (cond
+      ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE I *") 33.0)
+      ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE II *") 39.0)
+      ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE IV*") 47.0)
+      ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE V *") 50.0)
+      ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE VI*") 55.0)
+      (t 44.0) ; Zone III default
+    )
+  )
+  ;; Design wind pressure Pz = 0.6 * Vz^2 (N/m2) as per IS 875 (Part 3) with k1=1.0, k2=1.05, k3=1.0
+  (setq p-wind (* 0.6 vb vb 1.10))
+  (setq ballast-kg (fix (* (/ p-wind 9.81) (* *PV_MOD_LEN* *PV_MOD_WID*) 0.28)))
+  (if (< ballast-kg 25) (setq ballast-kg 25))
+  (list vb p-wind ballast-kg)
+)
+
+;;; --------------------------------------------------------------------------
+;;; IS 3043:2018 Chemical Earthing System Placement & Routing
+;;; --------------------------------------------------------------------------
+(defun c:pv-earthing (/ mode p1 p2 p3 dist-12 dist-23 dist-13)
+  (vl-load-com)
+  (pv:init-layers)
+  (initget "Place Route Schedule Clear")
+  (setq mode (getkword "\nEarthing (IS 3043) [Place/Route/Schedule/Clear] <Place>: "))
+  (if (null mode) (setq mode "Place"))
+  (cond
+    ((= mode "Clear")
+     (c:pv-clear-earthing)
+    )
+    ((= mode "Schedule")
+     (pv:draw-earthing-schedule)
+    )
+    ((= mode "Route")
+     (pv:route-earthing-strip)
+    )
+    (t ; Place
+     (princ "\n=======================================================")
+     (princ "\n [SolarPV] IS 3043:2018 CHEMICAL EARTHING SYSTEM SETUP")
+     (princ "\n Mandatory requirement: Min 3.0m separation between pits.")
+     (princ "\n=======================================================")
+     (setq p1 (getpoint "\nSelect location for EARTH PIT #1 [DC Array & MMS Grounding]: "))
+     (if p1
+       (progn
+         (pv:draw-chemical-earth-pit p1 "EARTH PIT #1 (DC ARRAY & MMS - IS 3043)" 1)
+         (setq p2 (getpoint p1 "\nSelect location for EARTH PIT #2 [AC Inverter & ACDB Grounding]: "))
+         (if p2
+           (progn
+             (setq dist-12 (distance p1 p2))
+             (if (< dist-12 3.0)
+               (alert (strcat "IS 3043 WARNING: Pit #1 & Pit #2 separation is " (rtos dist-12 2 2)
+                              "m (< 3.0m)!\n\nChemical earth pits should be segregated by at least 3.0m to prevent fault coupling."))
+             )
+             (pv:draw-chemical-earth-pit p2 "EARTH PIT #2 (AC INVERTER & ACDB - IS 3043)" 2)
+             (setq p3 (getpoint p2 "\nSelect location for EARTH PIT #3 [Dedicated Lightning Arrester Grounding]: "))
+             (if p3
+               (progn
+                 (setq dist-23 (distance p2 p3)
+                       dist-13 (distance p1 p3))
+                 (if (or (< dist-23 3.0) (< dist-13 3.0))
+                   (alert (strcat "IS 3043 / IS 62305 WARNING: Lightning Arrester Pit separation is < 3.0m!\n\n"
+                                  "Distance to Pit 1: " (rtos dist-13 2 2) "m\nDistance to Pit 2: " (rtos dist-23 2 2) "m\n"
+                                  "LA earth pit MUST be strictly segregated by >= 3.0m from electrical earth pits."))
+                 )
+                 (pv:draw-chemical-earth-pit p3 "EARTH PIT #3 (LA DEDICATED - IS 3043)" 3)
+                 (setq *PV_EARTHING_PITS* (list (list p1 "DC") (list p2 "AC") (list p3 "LA")))
+                 (princ "\n[SolarPV] Chemical Earth Pits successfully placed on layer 'PV_EARTHING'.")
+                 (alert (strcat "IS 3043 Chemical Earthing Pits Placed:\n\n"
+                                "Pit #1: DC Array & Structure Grounding\n"
+                                "Pit #2: AC Inverter & ACDB Enclosure Grounding\n"
+                                "Pit #3: Dedicated Lightning Arrester Grounding\n\n"
+                                "Electrode: 17.2mm dia x 3.0m Cu-Bonded Steel\n"
+                                "Compound: Bentonite/Carbon BFC\n"
+                                "Conductor: 25x3 mm GI Strip\n"
+                                "Target Resistance: < 5.0 Ohms certified."))
+               )
+             )
+           )
+         )
+       )
+     )
+    )
+  )
+  (princ)
+)
+
+(defun pv:draw-chemical-earth-pit (pt label id / x y)
+  (setq x (car pt) y (cadr pt))
+  ;; Outer chamber (0.35m dia)
+  (pv:draw-circle pt 0.35 "PV_EARTHING" 3)
+  ;; Inner electrode (0.08m dia)
+  (pv:draw-circle pt 0.08 "PV_EARTHING" 1)
+  ;; Ground symbol
+  (pv:draw-line (list (- x 0.20) (- y 0.05)) (list (+ x 0.20) (- y 0.05)) "PV_EARTHING" 3)
+  (pv:draw-line (list (- x 0.13) (- y 0.12)) (list (+ x 0.13) (- y 0.12)) "PV_EARTHING" 3)
+  (pv:draw-line (list (- x 0.06) (- y 0.19)) (list (+ x 0.06) (- y 0.19)) "PV_EARTHING" 3)
+  ;; 3m dashed separation guide circle
+  (pv:draw-circle pt 3.0 "PV_EARTHING" 8)
+  ;; Text label
+  (pv:draw-text (list (+ x 0.45) y) label 0.22 "PV_EARTHING" 7 0.0)
+  (pv:draw-text (list (+ x 0.45) (- y 0.30)) "17.2mm x 3.0m Cu-Bonded Rod | BFC Compound | R < 5 Ohm" 0.15 "PV_EARTHING" 8 0.0)
+)
+
+(defun pv:route-earthing-strip (/ p-start pts p-cur p-prev)
+  (pv:init-layers)
+  (princ "\n[SolarPV] Click vertices to route 25x3mm GI/Cu Main Earthing Strip (Press Enter to finish):")
+  (setq p-start (getpoint "\nStart point of Earthing Strip: "))
+  (if p-start
+    (progn
+      (setq pts (list p-start))
+      (while (setq p-cur (getpoint (car pts) "\nNext point along earthing corridor: "))
+        (setq pts (cons p-cur pts))
+        (setq p-prev (cadr pts))
+        (pv:draw-line p-prev p-cur "PV_EARTHING" 3)
+      )
+      (if (>= (length pts) 2)
+        (progn
+          (setq pts (reverse pts))
+          (pv:draw-lwpolyline pts "PV_EARTHING" 3 nil)
+          (pv:draw-text (car pts) "25x3 mm GI Earthing Strip (IS 3043)" 0.20 "PV_EARTHING" 3 0.0)
+          (princ (strcat "\n[SolarPV] Routed " (itoa (1- (length pts))) " segments of Earthing Strip."))
+        )
+      )
+    )
+  )
+  (princ)
+)
+
+(defun pv:draw-earthing-schedule (/ pt doc space table)
+  (setq pt (getpoint "\nSpecify insertion point for Earthing System Schedule: "))
+  (if pt
+    (progn
+      (setq doc (vla-get-ActiveDocument (vlax-get-acad-object)))
+      (setq space (vla-get-ModelSpace doc))
+      (if (vlax-method-applicable-p space 'AddTable)
+        (progn
+          (setq table (vla-AddTable space (vlax-3d-point pt) 5 5 0.36 6.0))
+          (vla-put-layer table "PV_EARTHING")
+          (vla-SetText table 0 0 "EARTHING SYSTEM SCHEDULE (IS 3043:2018 / CEIG)")
+          (vla-SetText table 1 0 "Pit ID")
+          (vla-SetText table 1 1 "Subsystem Connected")
+          (vla-SetText table 1 2 "Electrode Specification")
+          (vla-SetText table 1 3 "Conductor Strip")
+          (vla-SetText table 1 4 "Target Resistance")
+          (vla-SetText table 2 0 "EP-01")
+          (vla-SetText table 2 1 "DC PV Array & MMS Structure")
+          (vla-SetText table 2 2 "17.2mm x 3.0m Cu-Bonded Steel")
+          (vla-SetText table 2 3 "25x3 mm GI Flat + 8 SWG Cu")
+          (vla-SetText table 2 4 "< 5.0 Ohms")
+          (vla-SetText table 3 0 "EP-02")
+          (vla-SetText table 3 1 "Inverter Body & ACDB Enclosure")
+          (vla-SetText table 3 2 "17.2mm x 3.0m Cu-Bonded Steel")
+          (vla-SetText table 3 3 "25x3 mm GI / Copper Flat")
+          (vla-SetText table 3 4 "< 5.0 Ohms")
+          (vla-SetText table 4 0 "EP-03")
+          (vla-SetText table 4 1 "Lightning Arrester (Dedicated)")
+          (vla-SetText table 4 2 "17.2mm x 3.0m Cu-Bonded Steel")
+          (vla-SetText table 4 3 "25x3 mm GI Flat (Direct)")
+          (vla-SetText table 4 4 "< 5.0 Ohms")
+          (princ "\n[SolarPV] Earthing Schedule inserted.")
+        )
+      )
+    )
+  )
+  (princ)
+)
+
+(defun c:pv-clear-earthing (/ ss i)
+  (if (setq ss (ssget "X" '((8 . "PV_EARTHING,PV_LIGHTNING"))))
+    (progn
+      (setq i 0)
+      (while (< i (sslength ss))
+        (entdel (ssname ss i))
+        (setq i (1+ i))
+      )
+      (setq *PV_EARTHING_PITS* nil *PV_LIGHTNING_MAST* nil)
+      (princ "\n[SolarPV] Earthing and Lightning protection entities cleared.")
+    )
+    (princ "\n[SolarPV] No earthing or lightning entities found.")
+  )
+  (princ)
+)
+
+;;; --------------------------------------------------------------------------
+;;; IS/IEC 62305 & NBC 2016 Lightning Protection System (LA Mast & Protection Cone)
+;;; --------------------------------------------------------------------------
+(defun c:pv-lightning (/ mode pt mast-ht la-type radius)
+  (vl-load-com)
+  (pv:init-layers)
+  (initget "Place Cone Clear")
+  (setq mode (getkword "\nLightning Protection (IS/IEC 62305) [Place/Cone/Clear] <Place>: "))
+  (if (null mode) (setq mode "Place"))
+  (cond
+    ((= mode "Clear")
+     (if (setq ss (ssget "X" '((8 . "PV_LIGHTNING"))))
+       (progn
+         (setq i 0)
+         (while (< i (sslength ss)) (entdel (ssname ss i)) (setq i (1+ i)))
+         (setq *PV_LIGHTNING_MAST* nil)
+         (princ "\n[SolarPV] Lightning protection entities cleared.")
+       )
+     )
+    )
+    (t ; Place or Cone
+     (setq pt (getpoint "\nSelect insertion point for Lightning Arrester Mast (highest roof/mumty point): "))
+     (if pt
+       (progn
+         (initget "ESE Conventional")
+         (setq la-type (getkword "\nSelect LA Technology [ESE/Conventional] <ESE>: "))
+         (if (null la-type) (setq la-type "ESE"))
+         (initget 6)
+         (setq mast-ht (getdist pt "\nEnter Mast Elevation Height above roof in meters <2.5>: "))
+         (if (null mast-ht) (setq mast-ht 2.5))
+         ;; Calculate protection radius Rp as per IS/IEC 62305 / NFC 17-102
+         (setq radius
+           (if (= la-type "ESE")
+             (min 65.0 (+ (* mast-ht 8.0) 25.0)) ; ESE Level-I delta-T=60us ~45-65m
+             (* mast-ht (tan (dtr 45.0)))        ; Conventional 45 deg protective cone
+           )
+         )
+         ;; Draw Mast
+         (pv:draw-circle pt 0.30 "PV_LIGHTNING" 6)
+         (pv:draw-circle pt 0.08 "PV_LIGHTNING" 1)
+         (pv:draw-line (list (- (car pt) 0.5) (cadr pt)) (list (+ (car pt) 0.5) (cadr pt)) "PV_LIGHTNING" 6)
+         (pv:draw-line (list (car pt) (- (cadr pt) 0.5)) (list (car pt) (+ (cadr pt) 0.5)) "PV_LIGHTNING" 6)
+         ;; Draw Protective Coverage Circle
+         (pv:draw-circle pt radius "PV_LIGHTNING" 6)
+         (pv:draw-text (list (+ (car pt) 0.6) (+ (cadr pt) 0.3))
+                       (strcat "LIGHTNING ARRESTER (" la-type " - IS/IEC 62305) | Mast Ht: " (rtos mast-ht 2 1) "m | Protection Radius: " (rtos radius 2 1) "m")
+                       0.25 "PV_LIGHTNING" 6 0.0)
+         (setq *PV_LIGHTNING_MAST* (list pt radius la-type mast-ht))
+         (princ (strcat "\n[SolarPV] Lightning Arrester placed. Protection Coverage Radius = " (rtos radius 2 1) " meters."))
+         (alert (strcat "Lightning Protection System Placed (IS/IEC 62305):\n\n"
+                        "Technology: " la-type "\n"
+                        "Mast Height: " (rtos mast-ht 2 1) " m above roof\n"
+                        "Protective Radius: " (rtos radius 2 1) " m\n"
+                        "Down-Conductor: 25x3 mm GI Strip to dedicated Earth Pit #3\n"
+                        "Rolling Sphere Coverage Zone Drawn on 'PV_LIGHTNING'."))
+       )
+     )
+    )
+  )
+  (princ)
+)
+
+;;; --------------------------------------------------------------------------
+;;; Array Junction Box (AJB / DCDB) & ACDB / DISCOM GOS Switch Placement
+;;; --------------------------------------------------------------------------
+(defun c:pv-place-ajb (/ pt x y W H)
+  (vl-load-com)
+  (pv:init-layers)
+  (setq pt (getpoint "\nSelect location to place Array Junction Box (AJB / DCDB): "))
+  (if pt
+    (progn
+      (setq x (car pt) y (cadr pt) W 0.60 H 0.50)
+      (pv:draw-lwpolyline (list (list x y) (list (+ x W) y) (list (+ x W) (+ y H)) (list x (+ y H))) "PV_ELECTRICAL" 4 t)
+      (pv:draw-line (list x y) (list (+ x W) (+ y H)) "PV_ELECTRICAL" 8)
+      (pv:draw-text (list x (- y 0.25)) "AJB / DCDB (1000V DC Fuses + Type-II SPD)" 0.18 "PV_ELECTRICAL" 4 0.0)
+      (princ "\n[SolarPV] Array Junction Box placed on 'PV_ELECTRICAL'.")
+    )
+  )
+  (princ)
+)
+
+(defun c:pv-place-acdb (/ pt x y W H)
+  (vl-load-com)
+  (pv:init-layers)
+  (setq pt (getpoint "\nSelect location to place ACDB & DISCOM Manual GOS Switch: "))
+  (if pt
+    (progn
+      (setq x (car pt) y (cadr pt) W 0.80 H 0.60)
+      ;; ACDB enclosure
+      (pv:draw-lwpolyline (list (list x y) (list (+ x W) y) (list (+ x W) (+ y H)) (list x (+ y H))) "PV_ELECTRICAL" 3 t)
+      (pv:draw-text (list x (+ y H 0.15)) "ACDB (4-Pole MCCB + Type-II SPD + MFM)" 0.18 "PV_ELECTRICAL" 3 0.0)
+      ;; DISCOM Lockable GOS Switch
+      (pv:draw-lwpolyline (list (list (+ x W 0.2) y) (list (+ x W 0.6) y) (list (+ x W 0.6) (+ y 0.4)) (list (+ x W 0.2) (+ y 0.4))) "PV_ELECTRICAL" 1 t)
+      (pv:draw-text (list (+ x W 0.2) (- y 0.25)) "DISCOM Lockable Manual GOS Isolator" 0.18 "PV_ELECTRICAL" 1 0.0)
+      (princ "\n[SolarPV] ACDB & DISCOM GOS Isolator placed on 'PV_ELECTRICAL'.")
+    )
+  )
+  (princ)
+)
+
 ;;; 3B. COMPLEX ROOF GEOMETRY SPLITTING & MANAGEMENT (PVDesigner Standard)
 ;;; ==========================================================================
 (defun c:pv-hip-split (/ ent pts bbox minpt maxpt minx miny maxx maxy
@@ -3834,8 +4217,36 @@
   (princ)
 )
 
-(defun c:pv-one-dome ()
-  (c:pv-dome-split)
+(defun c:pv-one-dome (/ ent pts pitch-deg slope-dir)
+  (vl-load-com)
+  (pv:init-layers)
+  (princ "\n[SolarPV] Convert Roof Boundary to Uniform Single Pitch Plane:")
+  (setq ent (car (entsel "\nSelect curved / barrel / multi-facet roof polyline to convert: ")))
+  (if (not ent)
+    (princ "\n[SolarPV] No roof boundary selected.")
+    (progn
+      (setq pts (pv:get-polyline-pts ent))
+      (if (or (null pts) (< (length pts) 3))
+        (alert "Selected entity must be a closed roof boundary.")
+        (progn
+          (initget 6)
+          (setq pitch-deg (getreal "\nEnter Uniform Roof Pitch in Degrees <15.0>: "))
+          (if (null pitch-deg) (setq pitch-deg 15.0))
+          (initget "South North East West")
+          (setq slope-dir (getkword "\nEnter Slope Drainage Direction [South/North/East/West] <South>: "))
+          (if (null slope-dir) (setq slope-dir "South"))
+          (setq *PV_ROOF_TYPE* "Flat RCC Rooftop")
+          (setq *PV_ROOF_SLOPE* pitch-deg)
+          (setq *PV_ROOF_FACING* slope-dir)
+          (setq *PV_TILT* pitch-deg)
+          (pv:draw-text (car pts) (strcat "UNIFORM SINGLE PITCH ROOF (" (rtos pitch-deg 2 1) "%%d " slope-dir ")") 0.30 "PV_ANNOTATION" 3 0.0)
+          (princ (strcat "\n[SolarPV] Roof plane converted to Single Pitch: " (rtos pitch-deg 2 1) " deg facing " slope-dir "."))
+          (alert (strcat "Roof Converted to Single Pitch Plane!\n\nSlope Pitch: " (rtos pitch-deg 2 1) " deg\nFacing: " slope-dir "\nArray tilt angle synchronized."))
+        )
+      )
+    )
+  )
+  (princ)
 )
 
 ;;; --------------------------------------------------------------------------
@@ -4157,91 +4568,61 @@
 ;;; 5C. PRE-FLIGHT PROJECT VALIDATION SUITE (PVVALIDATE)
 ;;; ==========================================================================
 (defun c:pv-validate (/ total-mods stringed-mods vmp-str voc-str vmp-ok voc-ok
-                        plant-kw inv-cap dc-ac-ratio vdrop-ok pass-cnt warn-cnt
-                        rep-str ss)
-  (setq total-mods (if (> *PV_MODULE_COUNT* 0) *PV_MODULE_COUNT* 0))
-  (if (= total-mods 0)
-    (if (setq ss (ssget "X" '((0 . "LWPOLYLINE,POLYLINE,3DFACE") (8 . "PV_MODULES,PV_MODULES_EAST,PV_MODULES_WEST,PV_MODULES_SOUTH,PV_MODULES_NORTH"))))
-      (setq total-mods (sslength ss))
-    )
-  )
-  (setq stringed-mods 0)
-  (foreach str-data *PV_STRING_LIST*
-    (setq stringed-mods (+ stringed-mods (length (nth 2 str-data))))
-  )
-  (setq pass-cnt 0 warn-cnt 0 rep-str "")
-  
-  (if (and (> total-mods 0) (/= total-mods stringed-mods))
-    (progn
-      (setq warn-cnt (1+ warn-cnt))
-      (setq rep-str (strcat rep-str "[WARN] Orphaned Modules: " (itoa (- total-mods stringed-mods)) " modules are placed but NOT stringed.\n"))
-    )
-    (progn
-      (setq pass-cnt (1+ pass-cnt))
-      (setq rep-str (strcat rep-str "[PASS] String Coverage: All " (itoa total-mods) " placed modules are wired into strings.\n"))
-    )
-  )
-  
-  (setq plant-kw (/ (* total-mods *PV_MOD_WATT*) 1000.0))
-  (setq inv-cap (if (> *PV_INV_KW* 0.0) *PV_INV_KW* 50.0))
-  (setq dc-ac-ratio (if (> inv-cap 0.0) (/ plant-kw inv-cap) 1.2))
-  (if (or (< dc-ac-ratio 1.10) (> dc-ac-ratio 1.35))
-    (progn
-      (setq warn-cnt (1+ warn-cnt))
-      (setq rep-str (strcat rep-str "[WARN] DC/AC Ratio: " (rtos dc-ac-ratio 2 2) " (Recommended range: 1.15 to 1.30).\n"))
-    )
-    (progn
-      (setq pass-cnt (1+ pass-cnt))
-      (setq rep-str (strcat rep-str "[PASS] DC/AC Sizing Ratio: " (rtos dc-ac-ratio 2 2) " is optimal.\n"))
-    )
-  )
-  
-  (setq vmp-str (* (if (> *PV_STRING_SIZE* 0) *PV_STRING_SIZE* 20) *PV_PAN_VMP*))
-  (setq voc-str (* (if (> *PV_STRING_SIZE* 0) *PV_STRING_SIZE* 20) *PV_PAN_VOC*))
-  (setq vmp-ok (and (>= vmp-str *PV_INV_VMPP_MIN*) (<= vmp-str *PV_INV_VMPP_MAX*)))
-  (setq voc-ok (<= voc-str *PV_INV_VDC_MAX*))
-  (if vmp-ok
-    (progn
-      (setq pass-cnt (1+ pass-cnt))
-      (setq rep-str (strcat rep-str "[PASS] String Vmp: " (rtos vmp-str 2 0) "V within Inverter MPPT window (" (rtos *PV_INV_VMPP_MIN* 2 0) "-" (rtos *PV_INV_VMPP_MAX* 2 0) "V).\n"))
-    )
-    (progn
-      (setq warn-cnt (1+ warn-cnt))
-      (setq rep-str (strcat rep-str "[WARN] String Vmp: " (rtos vmp-str 2 0) "V outside Inverter MPPT window.\n"))
-    )
-  )
-  (if voc-ok
-    (progn
-      (setq pass-cnt (1+ pass-cnt))
-      (setq rep-str (strcat rep-str "[PASS] String Voc: " (rtos voc-str 2 0) "V < Max DC Voltage (" (rtos *PV_INV_VDC_MAX* 2 0) "V).\n"))
-    )
-    (progn
-      (setq warn-cnt (1+ warn-cnt))
-      (setq rep-str (strcat rep-str "[FAIL] String Voc: " (rtos voc-str 2 0) "V EXCEEDS Max DC Voltage limit!\n"))
-    )
-  )
-
-  (setq vdrop-ok (< *PV_VDROP_PERCENT* 1.5))
-  (if vdrop-ok
-    (progn
-      (setq pass-cnt (1+ pass-cnt))
-      (setq rep-str (strcat rep-str "[PASS] DC Voltage Drop: " (rtos *PV_VDROP_PERCENT* 2 2) "% complies with IEC 60364-7-712 (< 1.5%).\n"))
-    )
-    (progn
-      (setq warn-cnt (1+ warn-cnt))
-      (setq rep-str (strcat rep-str "[WARN] DC Voltage Drop: " (rtos *PV_VDROP_PERCENT* 2 2) "% exceeds 1.5% limit. Consider 6 sq.mm.\n"))
-    )
-  )
-
+                             p-kw s-load disc-ok temp-min voc-max-summer vmp-min-summer
+                             tilt-ok earthing-ok dist msg)
+  (vl-load-com)
   (princ "\n=======================================================")
-  (princ "\n [SolarPV] PRE-FLIGHT PROJECT VALIDATION (DRC):")
-  (princ (strcat "\n Checks Passed: " (itoa pass-cnt) " | Warnings/Flags: " (itoa warn-cnt)))
-  (princ "\n-------------------------------------------------------")
-  (princ rep-str)
-  (princ "=======================================================\n")
-  (alert (strcat "PV Project Validation (DRC):\n\n"
-                 "Passed Checks: " (itoa pass-cnt) " | Warnings: " (itoa warn-cnt) "\n\n"
-                 rep-str))
+  (princ "\n [SolarPV] PRE-FLIGHT ENGINEERING & STATUTORY COMPLIANCE")
+  (princ "\n Standards: CEA Regulations 2023 | IS 3043 | IS 16221")
+  (princ "\n=======================================================")
+
+  (setq total-mods *PV_MODULE_COUNT*)
+  (if (null total-mods) (setq total-mods 0))
+  (setq p-kw (/ (* total-mods *PV_MOD_WATT*) 1000.0))
+  (setq s-load (if (and (boundp '*PV_SANCTIONED_LOAD*) (> *PV_SANCTIONED_LOAD* 0.0)) *PV_SANCTIONED_LOAD* 25.0))
+
+  ;; 1. Sanctioned Load Check
+  (setq disc-ok (<= p-kw (* s-load 1.05)))
+
+  ;; 2. String Voltage Validation
+  (setq mods-per-str (if (> *PV_STRING_SIZE* 0) *PV_STRING_SIZE* 20))
+  (setq temp-min (if (and (boundp '*PV_TEMP_MIN*) *PV_TEMP_MIN*) *PV_TEMP_MIN* 8.0))
+  ;; Voc_max at winter minimum temp (IS 16221 / IEC 62548)
+  (setq voc-str (* mods-per-str *PV_PAN_VOC* (+ 1.0 (* (/ (if (> (abs *PV_PAN_TEMP_VOC*) 0.0) *PV_PAN_TEMP_VOC* -0.25) 100.0) (- temp-min 25.0)))))
+  ;; Vmp_min at summer peak cell temp (75°C)
+  (setq vmp-str (* mods-per-str *PV_PAN_VMP* (+ 1.0 (* (/ (if (> (abs *PV_PAN_TEMP_COEFF*) 0.0) *PV_PAN_TEMP_COEFF* -0.30) 100.0) (- 75.0 25.0)))))
+
+  (setq voc-ok (<= voc-str *PV_INV_VDC_MAX*))
+  (setq vmp-ok (and (>= vmp-str *PV_INV_VMPP_MIN*) (<= vmp-str *PV_INV_VMPP_MAX*)))
+
+  ;; 3. Minimum Tilt for Monsoon / Soiling in India
+  (setq tilt-ok (or (= *PV_ROOF_TYPE* "Sloped Metal Sheet Rooftop") (>= *PV_TILT* 10.0)))
+
+  ;; 4. Earthing Pit Distance Check
+  (setq earthing-ok t)
+  (if (and *PV_EARTHING_PITS* (>= (length *PV_EARTHING_PITS*) 2))
+    (progn
+      (setq dist (distance (caar *PV_EARTHING_PITS*) (caadr *PV_EARTHING_PITS*)))
+      (if (< dist 2.95) (setq earthing-ok nil))
+    )
+  )
+
+  (setq msg (strcat "PRE-FLIGHT ENGINEERING & STATUTORY AUDIT REPORT:\n"
+                    "--------------------------------------------------\n"
+                    "Installed Capacity  : " (rtos p-kw 2 2) " kWp\n"
+                    "DISCOM Sanctioned   : " (rtos s-load 2 1) " kW (" (if disc-ok "COMPLIANT PASS" "FAIL - Solar Exceeds Sanctioned Load!") ")\n"
+                    "Supply Voltage      : " (if (boundp '*PV_GRID_VOLTAGE*) *PV_GRID_VOLTAGE* "415V 3-Phase") "\n"
+                    "Winter Voc_max (8C) : " (rtos voc-str 2 1) " V (Max: " (rtos *PV_INV_VDC_MAX* 2 0) "V) -> " (if voc-ok "PASS" "FAIL OVERVOLTAGE") "\n"
+                    "Summer Vmp_min (75C): " (rtos vmp-str 2 1) " V (MPPT Min: " (rtos *PV_INV_VMPP_MIN* 2 0) "V) -> " (if vmp-ok "PASS" "FAIL UNDERVOLTAGE") "\n"
+                    "Rooftop Tilt (Drain): " (rtos *PV_TILT* 2 1) " deg (Min 10 deg) -> " (if tilt-ok "PASS" "WARNING: Tilt < 10 deg poses soiling/drainage risk in Indian monsoons") "\n"
+                    "IS 3043 Earthing Seg: " (if earthing-ok "PASS (Pits segregated >= 3.0m)" "WARNING: Segregation < 3.0m!") "\n"
+                    "--------------------------------------------------\n"
+                    (if (and disc-ok voc-ok vmp-ok tilt-ok earthing-ok)
+                      "Overall Status: PASSED FOR DISCOM / CEIG APPLICATION"
+                      "Overall Status: ATTENTION REQUIRED BEFORE SUBMISSION")
+            ))
+  (princ (strcat "\n" msg "\n"))
+  (alert msg)
   (princ)
 )
 
@@ -4250,16 +4631,16 @@
 ;;; ==========================================================================
 (defun c:pv-draw-sld (/ pt x y W H plant-kw inv-kw str-count mods-per-str
                          dc-kw-str voc-str vmp-str
-                         str-y-list i sy)
+                         str-y-list i sy ac-mccb-amps)
   (vl-load-com)
   (pv:init-layers)
-  (princ "\n[SolarPV] Single Line Diagram (SLD) Generator:")
+  (princ "\n[SolarPV] Single Line Diagram (SLD) Generator (CEIG & DISCOM Compliant - India):")
   (setq pt (getpoint "\nSpecify insertion point (bottom-left) for SLD Schematic: "))
   (if (not pt)
     (princ "\n[SolarPV] SLD generation cancelled.")
     (progn
       (setq x (car pt) y (cadr pt))
-      (setq W 34.0 H 20.0)
+      (setq W 38.0 H 22.0)
 
       (setq plant-kw (/ (* *PV_MODULE_COUNT* *PV_MOD_WATT*) 1000.0))
       (if (<= plant-kw 0.0) (setq plant-kw 50.0))
@@ -4274,6 +4655,8 @@
       (setq dc-kw-str (/ (* mods-per-str *PV_MOD_WATT*) 1000.0))
       (setq voc-str (* mods-per-str *PV_PAN_VOC*))
       (setq vmp-str (* mods-per-str *PV_PAN_VMP*))
+      (setq ac-mccb-amps (fix (+ (* (/ (* inv-kw 1000.0) (* 1.732 415.0 0.95)) 1.25) 0.5)))
+      (if (< ac-mccb-amps 16) (setq ac-mccb-amps 16))
 
       ;; 1. Outer Border
       (pv:draw-lwpolyline
@@ -4285,184 +4668,300 @@
         "PV_SLD" 7 t)
 
       ;; Header Banner
-      (pv:draw-line (list (+ x 0.4) (+ y (- H 2.2))) (list (+ x (- W 0.4)) (+ y (- H 2.2))) "PV_SLD" 7)
-      (pv:draw-text (list (+ x 1.0) (+ y (- H 1.2)))
-                    "ELECTRICAL SINGLE LINE DIAGRAM (SLD) - GRID-TIED SOLAR PV SYSTEM"
-                    0.45 "PV_SLD" 2 0.0)
-      (pv:draw-text (list (+ x 1.0) (+ y (- H 1.8)))
-                    (strcat "Project: " *PV_PROJ_NAME* " | DC Plant Capacity: " (rtos plant-kw 2 1) 
-                            " kWp | Inverter: " (rtos inv-kw 2 0) " kW AC | Standard: IEC 62446-1")
-                    0.25 "PV_SLD" 4 0.0)
+      (pv:draw-line (list (+ x 0.4) (+ y (- H 2.4))) (list (+ x (- W 0.4)) (+ y (- H 2.4))) "PV_SLD" 7)
+      (pv:draw-text (list (+ x 1.0) (+ y (- H 1.0)))
+                    "ELECTRICAL SINGLE LINE DIAGRAM (SLD) - GRID-TIED ROOFTOP SOLAR PV SYSTEM"
+                    0.40 "PV_SLD" 2 0.0)
+      (pv:draw-text (list (+ x 1.0) (+ y (- H 1.6)))
+                    (strcat "Project: " *PV_PROJ_NAME* " | DC Plant: " (rtos plant-kw 2 1) 
+                            " kWp | Inverter: " (rtos inv-kw 2 0) " kW AC (" *PV_INV_MFG* " " *PV_INV_MODEL* 
+                            ") | Sanctioned Load: " (rtos *PV_SANCTIONED_LOAD* 2 1) " kW (" *PV_GRID_VOLTAGE* ")")
+                    0.22 "PV_SLD" 4 0.0)
+      (pv:draw-text (list (+ x 1.0) (+ y (- H 2.1)))
+                    "Compliance: CEA Regulations 2023 | IS 3043:2018 | IS/IEC 62305 | IS 16221 | IS 16169 | IEC 62446-1"
+                    0.18 "PV_SLD" 8 0.0)
 
       ;; 2. Section Divisions
-      (pv:draw-line (list (+ x 11.5) (+ y 0.4)) (list (+ x 11.5) (+ y (- H 2.2))) "PV_SLD" 8)
-      (pv:draw-line (list (+ x 23.0) (+ y 0.4)) (list (+ x 23.0) (+ y (- H 2.2))) "PV_SLD" 8)
+      (pv:draw-line (list (+ x 12.0) (+ y 3.8)) (list (+ x 12.0) (+ y (- H 2.4))) "PV_SLD" 8)
+      (pv:draw-line (list (+ x 21.5) (+ y 3.8)) (list (+ x 21.5) (+ y (- H 2.4))) "PV_SLD" 8)
 
-      (pv:draw-text (list (+ x 3.5) (+ y (- H 2.8))) "DC SOLAR ARRAY FIELD" 0.30 "PV_SLD" 2 0.0)
-      (pv:draw-text (list (+ x 13.5) (+ y (- H 2.8))) "STRING INVERTER STATION" 0.30 "PV_SLD" 4 0.0)
-      (pv:draw-text (list (+ x 24.5) (+ y (- H 2.8))) "AC DISTRIBUTION & GRID" 0.30 "PV_SLD" 3 0.0)
+      (pv:draw-text (list (+ x 2.5) (+ y (- H 3.0))) "1. DC SOLAR ARRAY FIELD & AJB" 0.28 "PV_SLD" 2 0.0)
+      (pv:draw-text (list (+ x 13.0) (+ y (- H 3.0))) "2. STRING INVERTER STATION" 0.28 "PV_SLD" 4 0.0)
+      (pv:draw-text (list (+ x 23.0) (+ y (- H 3.0))) "3. AC DISTRIBUTION, METERING & GRID" 0.28 "PV_SLD" 3 0.0)
 
-      ;; 3. DC Side: 3 Representative Strings
-      (setq str-y-list (list (+ y 13.0) (+ y 9.5) (+ y 6.0)))
+      ;; 3. DC Side: Representative Strings with AJB Enclosure
+      (setq str-y-list (list (+ y 15.5) (+ y 12.5) (+ y 9.5)))
       (setq i 1)
       (foreach sy str-y-list
+        ;; Module Block
         (pv:draw-lwpolyline
-          (list (list (+ x 1.2) (- sy 0.8)) (list (+ x 3.2) (- sy 0.8))
-                (list (+ x 3.2) (+ sy 0.8)) (list (+ x 1.2) (+ sy 0.8)))
+          (list (list (+ x 1.0) (- sy 0.8)) (list (+ x 3.0) (- sy 0.8))
+                (list (+ x 3.0) (+ sy 0.8)) (list (+ x 1.0) (+ sy 0.8)))
           "PV_SLD" 5 t)
-        (pv:draw-line (list (+ x 2.2) (- sy 0.8)) (list (+ x 2.2) (+ sy 0.8)) "PV_SLD" 5)
-        (pv:draw-line (list (+ x 1.2) sy) (list (+ x 3.2) sy) "PV_SLD" 5)
+        (pv:draw-line (list (+ x 2.0) (- sy 0.8)) (list (+ x 2.0) (+ sy 0.8)) "PV_SLD" 5)
+        (pv:draw-line (list (+ x 1.0) sy) (list (+ x 3.0) sy) "PV_SLD" 5)
 
-        (pv:draw-text (list (+ x 1.3) (+ sy 0.95))
+        (pv:draw-text (list (+ x 1.1) (+ sy 0.95))
                       (strcat "String #" (itoa i) (if (= i 3) (strcat " .. #" (itoa str-count)) ""))
-                      0.20 "PV_SLD" 7 0.0)
-        (pv:draw-text (list (+ x 1.3) (- sy 1.15))
+                      0.18 "PV_SLD" 7 0.0)
+        (pv:draw-text (list (+ x 1.1) (- sy 1.10))
                       (strcat (itoa mods-per-str) "x " *PV_PAN_MODEL*)
-                      0.15 "PV_SLD" 8 0.0)
-        (pv:draw-text (list (+ x 1.3) (- sy 1.40))
-                      (strcat "Voc: " (rtos voc-str 2 0) "V | Vmp: " (rtos vmp-str 2 0) "V")
                       0.14 "PV_SLD" 8 0.0)
+        (pv:draw-text (list (+ x 1.1) (- sy 1.30))
+                      (strcat "Voc: " (rtos voc-str 2 0) "V | Vmp: " (rtos vmp-str 2 0) "V")
+                      0.13 "PV_SLD" 8 0.0)
 
-        (pv:draw-line (list (+ x 3.2) (+ sy 0.3)) (list (+ x 5.0) (+ sy 0.3)) "PV_SLD" 1)
-        (pv:draw-line (list (+ x 3.2) (- sy 0.3)) (list (+ x 5.0) (- sy 0.3)) "PV_SLD" 5)
+        ;; String leads to AJB
+        (pv:draw-line (list (+ x 3.0) (+ sy 0.3)) (list (+ x 4.8) (+ sy 0.3)) "PV_SLD" 1)
+        (pv:draw-line (list (+ x 3.0) (- sy 0.3)) (list (+ x 4.8) (- sy 0.3)) "PV_SLD" 5)
 
-        ;; DC Fuses
+        ;; DC Fuses (Positive & Negative)
         (pv:draw-lwpolyline
-          (list (list (+ x 5.0) (+ sy 0.15)) (list (+ x 5.8) (+ sy 0.15))
-                (list (+ x 5.8) (+ sy 0.45)) (list (+ x 5.0) (+ sy 0.45)))
+          (list (list (+ x 4.8) (+ sy 0.15)) (list (+ x 5.6) (+ sy 0.15))
+                (list (+ x 5.6) (+ sy 0.45)) (list (+ x 4.8) (+ sy 0.45)))
           "PV_SLD" 1 t)
-        (pv:draw-line (list (+ x 5.0) (+ sy 0.3)) (list (+ x 5.8) (+ sy 0.3)) "PV_SLD" 1)
+        (pv:draw-line (list (+ x 4.8) (+ sy 0.3)) (list (+ x 5.6) (+ sy 0.3)) "PV_SLD" 1)
         (pv:draw-lwpolyline
-          (list (list (+ x 5.0) (- sy 0.45)) (list (+ x 5.8) (- sy 0.45))
-                (list (+ x 5.8) (- sy 0.15)) (list (+ x 5.0) (- sy 0.15)))
+          (list (list (+ x 4.8) (- sy 0.45)) (list (+ x 5.6) (- sy 0.45))
+                (list (+ x 5.6) (- sy 0.15)) (list (+ x 4.8) (- sy 0.15)))
           "PV_SLD" 5 t)
-        (pv:draw-line (list (+ x 5.0) (- sy 0.3)) (list (+ x 5.8) (- sy 0.3)) "PV_SLD" 5)
-        (pv:draw-text (list (+ x 5.0) (+ sy 0.55)) "15A gPV" 0.13 "PV_SLD" 7 0.0)
+        (pv:draw-line (list (+ x 4.8) (- sy 0.3)) (list (+ x 5.6) (- sy 0.3)) "PV_SLD" 5)
+        (pv:draw-text (list (+ x 4.7) (+ sy 0.55)) "15A gPV (+)" 0.12 "PV_SLD" 7 0.0)
+        (pv:draw-text (list (+ x 4.7) (- sy 0.65)) "15A gPV (-)" 0.12 "PV_SLD" 7 0.0)
 
-        (pv:draw-line (list (+ x 5.8) (+ sy 0.3)) (list (+ x 7.6) (+ sy 0.3)) "PV_SLD" 1)
-        (pv:draw-line (list (+ x 5.8) (- sy 0.3)) (list (+ x 7.6) (- sy 0.3)) "PV_SLD" 5)
+        (pv:draw-line (list (+ x 5.6) (+ sy 0.3)) (list (+ x 7.2) (+ sy 0.3)) "PV_SLD" 1)
+        (pv:draw-line (list (+ x 5.6) (- sy 0.3)) (list (+ x 7.2) (- sy 0.3)) "PV_SLD" 5)
 
         ;; DC SPD tap
-        (pv:draw-line (list (+ x 6.8) (+ sy 0.3)) (list (+ x 6.8) (+ sy 0.9)) "PV_SLD" 1)
+        (pv:draw-line (list (+ x 6.4) (+ sy 0.3)) (list (+ x 6.4) (+ sy 0.85)) "PV_SLD" 1)
         (pv:draw-lwpolyline
-          (list (list (+ x 6.5) (+ sy 0.9)) (list (+ x 7.1) (+ sy 0.9))
-                (list (+ x 7.1) (+ sy 1.3)) (list (+ x 6.5) (+ sy 1.3)))
+          (list (list (+ x 6.1) (+ sy 0.85)) (list (+ x 6.7) (+ sy 0.85))
+                (list (+ x 6.7) (+ sy 1.25)) (list (+ x 6.1) (+ sy 1.25)))
           "PV_SLD" 30 t)
-        (pv:draw-text (list (+ x 6.5) (+ sy 1.4)) "SPD II" 0.12 "PV_SLD" 30 0.0)
-        (pv:draw-line (list (+ x 6.8) (+ sy 1.3)) (list (+ x 6.8) (+ sy 1.5)) "PV_SLD" 3)
-        (pv:draw-line (list (+ x 6.6) (+ sy 1.5)) (list (+ x 7.0) (+ sy 1.5)) "PV_SLD" 3)
-        (pv:draw-line (list (+ x 6.7) (+ sy 1.6)) (list (+ x 6.9) (+ sy 1.6)) "PV_SLD" 3)
+        (pv:draw-text (list (+ x 6.0) (+ sy 1.35)) "DC SPD Type II" 0.11 "PV_SLD" 30 0.0)
+        (pv:draw-line (list (+ x 6.4) (+ sy 1.25)) (list (+ x 6.4) (+ sy 1.45)) "PV_SLD" 3)
+        (pv:draw-line (list (+ x 6.2) (+ sy 1.45)) (list (+ x 6.6) (+ sy 1.45)) "PV_SLD" 3)
 
-        ;; DC Switch
-        (pv:draw-circle (list (+ x 7.6) (+ sy 0.3)) 0.08 "PV_SLD" 1)
-        (pv:draw-circle (list (+ x 8.4) (+ sy 0.3)) 0.08 "PV_SLD" 1)
-        (pv:draw-line (list (+ x 7.6) (+ sy 0.3)) (list (+ x 8.3) (+ sy 0.6)) "PV_SLD" 1)
-        (pv:draw-circle (list (+ x 7.6) (- sy 0.3)) 0.08 "PV_SLD" 5)
-        (pv:draw-circle (list (+ x 8.4) (- sy 0.3)) 0.08 "PV_SLD" 5)
-        (pv:draw-line (list (+ x 7.6) (- sy 0.3)) (list (+ x 8.3) (- sy 0.0)) "PV_SLD" 5)
-        (pv:draw-text (list (+ x 7.5) (+ sy 0.8)) "DC SW (32A)" 0.12 "PV_SLD" 7 0.0)
+        ;; DC Rotary Isolator Switch
+        (pv:draw-circle (list (+ x 7.2) (+ sy 0.3)) 0.08 "PV_SLD" 1)
+        (pv:draw-circle (list (+ x 8.0) (+ sy 0.3)) 0.08 "PV_SLD" 1)
+        (pv:draw-line (list (+ x 7.2) (+ sy 0.3)) (list (+ x 7.9) (+ sy 0.6)) "PV_SLD" 1)
+        (pv:draw-circle (list (+ x 7.2) (- sy 0.3)) 0.08 "PV_SLD" 5)
+        (pv:draw-circle (list (+ x 8.0) (- sy 0.3)) 0.08 "PV_SLD" 5)
+        (pv:draw-line (list (+ x 7.2) (- sy 0.3)) (list (+ x 7.9) (- sy 0.0)) "PV_SLD" 5)
+        (pv:draw-text (list (+ x 7.1) (+ sy 0.75)) "DC Isolator 32A" 0.11 "PV_SLD" 7 0.0)
 
-        (pv:draw-line (list (+ x 8.4) (+ sy 0.3)) (list (+ x 12.5) (+ sy 0.3)) "PV_SLD" 1)
-        (pv:draw-line (list (+ x 8.4) (- sy 0.3)) (list (+ x 12.5) (- sy 0.3)) "PV_SLD" 5)
-        (pv:draw-text (list (+ x 8.8) (+ sy 0.45)) (strcat "MPPT #" (itoa i) " In") 0.13 "PV_SLD" 4 0.0)
+        ;; Leads to Inverter
+        (pv:draw-line (list (+ x 8.0) (+ sy 0.3)) (list (+ x 12.5) (+ sy 0.3)) "PV_SLD" 1)
+        (pv:draw-line (list (+ x 8.0) (- sy 0.3)) (list (+ x 12.5) (- sy 0.3)) "PV_SLD" 5)
+        (pv:draw-text (list (+ x 8.5) (+ sy 0.45)) (strcat "MPPT #" (itoa i) " In (1C x 4 mm2 Cu)") 0.12 "PV_SLD" 4 0.0)
 
         (setq i (1+ i))
       )
 
-      ;; 4. Inverter Block
+      ;; Array Junction Box (AJB/DCDB) Boundary (dashed)
       (pv:draw-lwpolyline
-        (list (list (+ x 12.5) (+ y 4.5)) (list (+ x 21.5) (+ y 4.5))
-              (list (+ x 21.5) (+ y 15.5)) (list (+ x 12.5) (+ y 15.5)))
-        "PV_SLD" 4 t)
-      (pv:draw-text (list (+ x 13.0) (+ y 14.8)) (strcat *PV_INV_MFG* " " *PV_INV_MODEL*) 0.28 "PV_SLD" 2 0.0)
-      (pv:draw-text (list (+ x 13.0) (+ y 14.2)) (strcat "Rated AC Power: " (rtos inv-kw 2 0) " kW (Euro Eff: 98.5%)") 0.18 "PV_SLD" 7 0.0)
-      (pv:draw-text (list (+ x 13.0) (+ y 13.7)) (strcat "Inputs: " (itoa *PV_INV_INPUTS*) " Strings | " (itoa *PV_INV_MPPT_COUNT*) " Independent MPPTs") 0.16 "PV_SLD" 7 0.0)
-
-      (pv:draw-lwpolyline
-        (list (list (+ x 13.5) (+ y 7.5)) (list (+ x 16.5) (+ y 7.5))
-              (list (+ x 16.5) (+ y 12.0)) (list (+ x 13.5) (+ y 12.0)))
-        "PV_SLD" 8 t)
-      (pv:draw-text (list (+ x 13.8) (+ y 9.8)) "DC-DC" 0.20 "PV_SLD" 7 0.0)
-      (pv:draw-text (list (+ x 13.7) (+ y 9.3)) "MPPT" 0.18 "PV_SLD" 7 0.0)
-
-      (pv:draw-line (list (+ x 16.5) (+ y 9.75)) (list (+ x 17.5) (+ y 9.75)) "PV_SLD" 7)
-
-      (pv:draw-lwpolyline
-        (list (list (+ x 17.5) (+ y 7.5)) (list (+ x 20.5) (+ y 7.5))
-              (list (+ x 20.5) (+ y 12.0)) (list (+ x 17.5) (+ y 12.0)))
-        "PV_SLD" 8 t)
-      (pv:draw-line (list (+ x 17.5) (+ y 7.5)) (list (+ x 20.5) (+ y 12.0)) "PV_SLD" 8)
-      (pv:draw-text (list (+ x 18.0) (+ y 10.8)) "=" 0.35 "PV_SLD" 1 0.0)
-      (pv:draw-text (list (+ x 19.3) (+ y 8.3)) "~" 0.35 "PV_SLD" 3 0.0)
-      (pv:draw-text (list (+ x 17.8) (+ y 6.8)) "PWM IGBT Inverter" 0.15 "PV_SLD" 8 0.0)
-
-      ;; Inverter Earth
-      (pv:draw-line (list (+ x 17.0) (+ y 4.5)) (list (+ x 17.0) (+ y 3.5)) "PV_SLD" 3)
-      (pv:draw-line (list (+ x 16.7) (+ y 3.5)) (list (+ x 17.3) (+ y 3.5)) "PV_SLD" 3)
-      (pv:draw-line (list (+ x 16.8) (+ y 3.35)) (list (+ x 17.2) (+ y 3.35)) "PV_SLD" 3)
-      (pv:draw-text (list (+ x 17.5) (+ y 3.5)) "Dedicated Earth Pit (< 2 Ohm)" 0.13 "PV_SLD" 3 0.0)
-
-      ;; 5. AC Side
-      (pv:draw-line (list (+ x 21.5) (+ y 10.0)) (list (+ x 24.5) (+ y 10.0)) "PV_SLD" 3)
-      (pv:draw-text (list (+ x 22.0) (+ y 10.3)) "415V, 3-Phase, 4-Wire" 0.15 "PV_SLD" 7 0.0)
-
-      ;; AC Breaker
-      (pv:draw-lwpolyline
-        (list (list (+ x 24.5) (+ y 9.2)) (list (+ x 25.7) (+ y 9.2))
-              (list (+ x 25.7) (+ y 10.8)) (list (+ x 24.5) (+ y 10.8)))
-        "PV_SLD" 1 t)
-      (pv:draw-line (list (+ x 24.5) (+ y 9.2)) (list (+ x 25.7) (+ y 10.8)) "PV_SLD" 1)
-      (pv:draw-text (list (+ x 24.2) (+ y 11.2)) (strcat "AC MCCB " (rtos (* (/ (* inv-kw 1000.0) (* 1.732 415.0 0.95)) 1.25) 2 0) "A 4P") 0.15 "PV_SLD" 7 0.0)
-
-      (pv:draw-line (list (+ x 25.7) (+ y 10.0)) (list (+ x 28.0) (+ y 10.0)) "PV_SLD" 3)
-
-      ;; AC SPD
-      (pv:draw-line (list (+ x 26.5) (+ y 10.0)) (list (+ x 26.5) (+ y 8.5)) "PV_SLD" 3)
-      (pv:draw-lwpolyline
-        (list (list (+ x 26.1) (+ y 8.5)) (list (+ x 26.9) (+ y 8.5))
-              (list (+ x 26.9) (+ y 7.7)) (list (+ x 26.1) (+ y 7.7)))
+        (list (list (+ x 4.4) (+ y 8.2)) (list (+ x 8.4) (+ y 8.2))
+              (list (+ x 8.4) (+ y 17.0)) (list (+ x 4.4) (+ y 17.0)))
         "PV_SLD" 30 t)
-      (pv:draw-text (list (+ x 27.1) (+ y 8.0)) "AC SPD (40kA, Class II)" 0.13 "PV_SLD" 30 0.0)
-      (pv:draw-line (list (+ x 26.5) (+ y 7.7)) (list (+ x 26.5) (+ y 7.2)) "PV_SLD" 3)
-      (pv:draw-line (list (+ x 26.3) (+ y 7.2)) (list (+ x 26.7) (+ y 7.2)) "PV_SLD" 3)
+      (pv:draw-text (list (+ x 4.6) (+ y 17.2)) "ARRAY JUNCTION BOX (AJB/DCDB) IP65" 0.14 "PV_SLD" 30 0.0)
+      ;; AJB Earthing tap to Earth Pit 1
+      (pv:draw-line (list (+ x 6.4) (+ y 8.2)) (list (+ x 6.4) (+ y 7.0)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 6.4) (+ y 7.0)) (list (+ x 4.5) (+ y 7.0)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 4.5) (+ y 7.0)) (list (+ x 4.5) (+ y 5.8)) "PV_SLD" 3)
 
-      ;; Net Meter
-      (pv:draw-circle (list (+ x 28.8) (+ y 10.0)) 0.80 "PV_SLD" 4)
-      (pv:draw-text (list (+ x 28.4) (+ y 9.85)) "kWh" 0.22 "PV_SLD" 7 0.0)
-      (pv:draw-text (list (+ x 28.2) (+ y 11.1)) "NET METER" 0.16 "PV_SLD" 4 0.0)
-      (pv:draw-text (list (+ x 28.1) (+ y 8.6)) "(Bi-directional)" 0.13 "PV_SLD" 8 0.0)
-
-      (pv:draw-line (list (+ x 29.6) (+ y 10.0)) (list (+ x 31.5) (+ y 10.0)) "PV_SLD" 3)
-
-      ;; LT Busbar
-      (pv:draw-line (list (+ x 31.5) (+ y 7.0)) (list (+ x 31.5) (+ y 13.0)) "PV_SLD" 1)
-      (pv:draw-line (list (+ x 31.6) (+ y 7.0)) (list (+ x 31.6) (+ y 13.0)) "PV_SLD" 1)
-      (pv:draw-text (list (+ x 30.2) (+ y 13.3)) "LT BUS (415V, 50Hz)" 0.16 "PV_SLD" 1 0.0)
-
-      ;; Grid Arrow
-      (pv:draw-line (list (+ x 31.6) (+ y 10.0)) (list (+ x 33.2) (+ y 10.0)) "PV_SLD" 3)
-      (pv:draw-line (list (+ x 33.2) (+ y 10.0)) (list (+ x 32.7) (+ y 10.3)) "PV_SLD" 3)
-      (pv:draw-line (list (+ x 33.2) (+ y 10.0)) (list (+ x 32.7) (+ y 9.7)) "PV_SLD" 3)
-      (pv:draw-text (list (+ x 31.8) (+ y 10.4)) "TO UTILITY GRID" 0.18 "PV_SLD" 2 0.0)
-
-      ;; 6. Cable Schedule & Legend Box
+      ;; 4. Inverter Station
       (pv:draw-lwpolyline
-        (list (list (+ x 1.0) (+ y 0.8)) (list (+ x (- W 1.0)) (+ y 0.8))
-              (list (+ x (- W 1.0)) (+ y 2.8)) (list (+ x 1.0) (+ y 2.8)))
-        "PV_SLD" 8 t)
-      (pv:draw-text (list (+ x 1.4) (+ y 2.3)) "CABLE SCHEDULE & SYSTEM SPECIFICATIONS:" 0.18 "PV_SLD" 2 0.0)
-      (pv:draw-text (list (+ x 1.4) (+ y 1.7))
-                    "DC Strings Cable : 1C x 4 sq.mm Copper Solar Cable, XLPO insulated, UV-resistant, 1500V DC | Tray: Perforated GI"
+        (list (list (+ x 12.5) (+ y 7.5)) (list (+ x 20.5) (+ y 7.5))
+              (list (+ x 20.5) (+ y 17.5)) (list (+ x 12.5) (+ y 17.5)))
+        "PV_SLD" 4 t)
+      (pv:draw-text (list (+ x 13.0) (+ y 16.9))
+                    (strcat "STRING INVERTER (" *PV_INV_MFG* " " *PV_INV_MODEL* ")")
+                    0.20 "PV_SLD" 2 0.0)
+      (pv:draw-text (list (+ x 13.0) (+ y 16.3))
+                    (strcat "Rated AC Output : " (rtos inv-kw 2 0) " kW, 415V, 3-Phase")
                     0.13 "PV_SLD" 7 0.0)
-      (pv:draw-text (list (+ x 1.4) (+ y 1.2))
-                    "AC Main Cable    : 4C x 50 sq.mm XLPE Aluminium Armoured Cable, 1.1kV grade | Earthing: 25x3 mm GI Grounding Strip"
+      (pv:draw-text (list (+ x 13.0) (+ y 15.8))
+                    (strcat "Max DC Input    : " (rtos *PV_INV_VDC_MAX* 2 0) "V | MPPT: " 
+                            (itoa *PV_INV_MPPT_COUNT*) " Trackers")
                     0.13 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 13.0) (+ y 15.3))
+                    (strcat "MPPT Range      : " (rtos *PV_INV_VMPP_MIN* 2 0) "V - " (rtos *PV_INV_VMPP_MAX* 2 0) "V")
+                    0.13 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 13.0) (+ y 14.8))
+                    (strcat "Max Efficiency  : " (rtos *PV_INV_EFF_MAX* 2 1) "% (Euro: " (rtos *PV_INV_EFF_EURO* 2 1) "%)")
+                    0.13 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 13.0) (+ y 14.3))
+                    "Protection      : Anti-Islanding (<2s), RCMU, Insulation Mon."
+                    0.13 "PV_SLD" 8 0.0)
 
-      (princ (strcat "\n[SolarPV] Single Line Diagram (SLD) successfully generated at (" (rtos x 2 2) ", " (rtos y 2 2) ")."))
-      (alert (strcat "Single Line Diagram (SLD) Generated!\n\nPlant Capacity: " (rtos plant-kw 2 1) " kWp"
-                     "\nInverter: " (rtos inv-kw 2 0) " kW AC (" *PV_INV_MFG* " " *PV_INV_MODEL* ")"
-                     "\nTotal Strings: " (itoa str-count) " (" (itoa mods-per-str) " mods/string)"
-                     "\n\nPublication-ready schematic generated on layer 'PV_SLD'."))
+      ;; Inverter schematic symbol (DC to AC Bridge)
+      (pv:draw-lwpolyline
+        (list (list (+ x 14.5) (+ y 9.0)) (list (+ x 18.5) (+ y 9.0))
+              (list (+ x 18.5) (+ y 13.5)) (list (+ x 14.5) (+ y 13.5)))
+        "PV_SLD" 8 t)
+      (pv:draw-line (list (+ x 14.5) (+ y 9.0)) (list (+ x 18.5) (+ y 13.5)) "PV_SLD" 8)
+      (pv:draw-text (list (+ x 15.0) (+ y 12.3)) "=" 0.40 "PV_SLD" 1 0.0)
+      (pv:draw-text (list (+ x 17.2) (+ y 9.8)) "~" 0.40 "PV_SLD" 3 0.0)
+      (pv:draw-text (list (+ x 14.8) (+ y 8.3)) "PWM IGBT Inverter Stage" 0.14 "PV_SLD" 8 0.0)
+
+      ;; Inverter Body Earthing line down to Earth Pit #2
+      (pv:draw-line (list (+ x 16.5) (+ y 7.5)) (list (+ x 16.5) (+ y 5.8)) "PV_SLD" 3)
+
+      ;; 5. AC Distribution, Protection, Metering & DISCOM Grid Interface
+      ;; Main AC Line from Inverter
+      (pv:draw-line (list (+ x 20.5) (+ y 12.5)) (list (+ x 22.3) (+ y 12.5)) "PV_SLD" 3)
+      (pv:draw-text (list (+ x 20.7) (+ y 12.8)) "415V, 3-Phase, 4-Wire" 0.13 "PV_SLD" 7 0.0)
+
+      ;; ACDB Enclosure Box
+      (pv:draw-lwpolyline
+        (list (list (+ x 22.3) (+ y 9.0)) (list (+ x 26.2) (+ y 9.0))
+              (list (+ x 26.2) (+ y 16.0)) (list (+ x 22.3) (+ y 16.0)))
+        "PV_SLD" 30 t)
+      (pv:draw-text (list (+ x 22.5) (+ y 16.2)) "AC DISTRIBUTION BOX (ACDB) IP65" 0.14 "PV_SLD" 30 0.0)
+
+      ;; AC MCCB inside ACDB
+      (pv:draw-lwpolyline
+        (list (list (+ x 22.6) (+ y 11.7)) (list (+ x 23.8) (+ y 11.7))
+              (list (+ x 23.8) (+ y 13.3)) (list (+ x 22.6) (+ y 13.3)))
+        "PV_SLD" 1 t)
+      (pv:draw-line (list (+ x 22.6) (+ y 11.7)) (list (+ x 23.8) (+ y 13.3)) "PV_SLD" 1)
+      (pv:draw-text (list (+ x 22.4) (+ y 13.6)) (strcat "AC MCCB " (itoa ac-mccb-amps) "A 4P") 0.13 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 22.4) (+ y 11.1)) "36kA Shunt Trip" 0.11 "PV_SLD" 8 0.0)
+
+      (pv:draw-line (list (+ x 23.8) (+ y 12.5)) (list (+ x 26.2) (+ y 12.5)) "PV_SLD" 3)
+
+      ;; AC SPD inside ACDB
+      (pv:draw-line (list (+ x 25.0) (+ y 12.5)) (list (+ x 25.0) (+ y 10.8)) "PV_SLD" 3)
+      (pv:draw-lwpolyline
+        (list (list (+ x 24.6) (+ y 10.8)) (list (+ x 25.4) (+ y 10.8))
+              (list (+ x 25.4) (+ y 10.0)) (list (+ x 24.6) (+ y 10.0)))
+        "PV_SLD" 30 t)
+      (pv:draw-text (list (+ x 24.2) (+ y 9.5)) "AC SPD Type II (40kA)" 0.11 "PV_SLD" 30 0.0)
+      ;; ACDB earth lead to Earth Pit #2
+      (pv:draw-line (list (+ x 25.0) (+ y 10.0)) (list (+ x 25.0) (+ y 7.0)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 25.0) (+ y 7.0)) (list (+ x 16.5) (+ y 7.0)) "PV_SLD" 3)
+
+      ;; Line out of ACDB to Solar Generation Check Meter
+      (pv:draw-line (list (+ x 26.2) (+ y 12.5)) (list (+ x 27.8) (+ y 12.5)) "PV_SLD" 3)
+
+      ;; Solar Generation Check Meter (Mandated by CEA Regulations 2023 / DISCOMs)
+      (pv:draw-circle (list (+ x 28.5) (+ y 12.5)) 0.70 "PV_SLD" 4)
+      (pv:draw-text (list (+ x 28.1) (+ y 12.35)) "kWh" 0.18 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 27.2) (+ y 13.5)) "SOLAR CHECK METER" 0.14 "PV_SLD" 4 0.0)
+      (pv:draw-text (list (+ x 27.3) (+ y 11.3)) "Class 0.2S (CEA 2023)" 0.11 "PV_SLD" 8 0.0)
+
+      (pv:draw-line (list (+ x 29.2) (+ y 12.5)) (list (+ x 30.5) (+ y 12.5)) "PV_SLD" 3)
+
+      ;; DISCOM External Manual Isolator (GOS Switch with Visible Air Gap & Padlock)
+      (pv:draw-circle (list (+ x 30.7) (+ y 12.5)) 0.08 "PV_SLD" 1)
+      (pv:draw-circle (list (+ x 31.7) (+ y 12.5)) 0.08 "PV_SLD" 1)
+      (pv:draw-line (list (+ x 30.7) (+ y 12.5)) (list (+ x 31.6) (+ y 13.0)) "PV_SLD" 1)
+      (pv:draw-text (list (+ x 30.0) (+ y 13.4)) "DISCOM MANUAL ISOLATOR" 0.13 "PV_SLD" 1 0.0)
+      (pv:draw-text (list (+ x 30.1) (+ y 11.8)) "Visible Break & Padlockable" 0.11 "PV_SLD" 8 0.0)
+
+      (pv:draw-line (list (+ x 31.7) (+ y 12.5)) (list (+ x 32.8) (+ y 12.5)) "PV_SLD" 3)
+
+      ;; Bi-Directional Net Meter (DISCOM Tariff Meter)
+      (pv:draw-circle (list (+ x 33.5) (+ y 12.5)) 0.70 "PV_SLD" 3)
+      (pv:draw-text (list (+ x 33.1) (+ y 12.35)) "kWh" 0.18 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 32.5) (+ y 13.5)) "NET TARIFF METER" 0.14 "PV_SLD" 3 0.0)
+      (pv:draw-text (list (+ x 32.7) (+ y 11.3)) "(Bi-directional)" 0.11 "PV_SLD" 8 0.0)
+
+      (pv:draw-line (list (+ x 34.2) (+ y 12.5)) (list (+ x 35.5) (+ y 12.5)) "PV_SLD" 3)
+
+      ;; LT Main Busbar
+      (pv:draw-line (list (+ x 35.5) (+ y 9.5)) (list (+ x 35.5) (+ y 15.5)) "PV_SLD" 1)
+      (pv:draw-line (list (+ x 35.6) (+ y 9.5)) (list (+ x 35.6) (+ y 15.5)) "PV_SLD" 1)
+      (pv:draw-text (list (+ x 34.5) (+ y 15.8)) "LT BUS (415V, 50Hz, 3Ph 4W)" 0.14 "PV_SLD" 1 0.0)
+
+      ;; Utility Grid Arrow
+      (pv:draw-line (list (+ x 35.6) (+ y 12.5)) (list (+ x 37.2) (+ y 12.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 37.2) (+ y 12.5)) (list (+ x 36.7) (+ y 12.8)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 37.2) (+ y 12.5)) (list (+ x 36.7) (+ y 12.2)) "PV_SLD" 3)
+      (pv:draw-text (list (+ x 35.8) (+ y 12.8)) "TO UTILITY GRID" 0.16 "PV_SLD" 2 0.0)
+
+      ;; 6. Dedicated Indian Chemical Earthing Section (IS 3043:2018 & CEA Reg 2023)
+      (pv:draw-line (list (+ x 0.4) (+ y 7.4)) (list (+ x (- W 0.4)) (+ y 7.4)) "PV_SLD" 8)
+      (pv:draw-text (list (+ x 1.0) (+ y 7.0))
+                    "DEDICATED CHEMICAL EARTHING SYSTEM (IS 3043:2018 & CEA SAFETY REGULATIONS 2023):"
+                    0.16 "PV_SLD" 3 0.0)
+
+      ;; Earth Pit #1 (DC Side)
+      (pv:draw-circle (list (+ x 4.5) (+ y 5.2)) 0.35 "PV_SLD" 3)
+      (pv:draw-circle (list (+ x 4.5) (+ y 5.2)) 0.15 "PV_SLD" 3)
+      (pv:draw-line (list (+ x 4.5) (+ y 5.2)) (list (+ x 4.5) (+ y 4.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 4.1) (+ y 4.5)) (list (+ x 4.9) (+ y 4.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 4.25) (+ y 4.35)) (list (+ x 4.75) (+ y 4.35)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 4.4) (+ y 4.2)) (list (+ x 4.6) (+ y 4.2)) "PV_SLD" 3)
+      (pv:draw-text (list (+ x 2.2) (+ y 6.4)) "EARTH PIT #1 (DC ARRAYS & AJB)" 0.14 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 2.2) (+ y 6.0)) "25x3 mm GI Strip | R < 5.0 Ohms" 0.12 "PV_SLD" 3 0.0)
+      (pv:draw-text (list (+ x 2.2) (+ y 4.0)) "Maintenance-Free Chemical Pit" 0.11 "PV_SLD" 8 0.0)
+
+      ;; Earth Pit #2 (AC & Inverter)
+      (pv:draw-circle (list (+ x 16.5) (+ y 5.2)) 0.35 "PV_SLD" 3)
+      (pv:draw-circle (list (+ x 16.5) (+ y 5.2)) 0.15 "PV_SLD" 3)
+      (pv:draw-line (list (+ x 16.5) (+ y 5.2)) (list (+ x 16.5) (+ y 4.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 16.1) (+ y 4.5)) (list (+ x 16.9) (+ y 4.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 16.25) (+ y 4.35)) (list (+ x 16.75) (+ y 4.35)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 16.4) (+ y 4.2)) (list (+ x 16.6) (+ y 4.2)) "PV_SLD" 3)
+      (pv:draw-text (list (+ x 14.0) (+ y 6.4)) "EARTH PIT #2 (INVERTER & ACDB)" 0.14 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 14.0) (+ y 6.0)) "25x3 mm GI Strip | R < 5.0 Ohms" 0.12 "PV_SLD" 3 0.0)
+      (pv:draw-text (list (+ x 14.0) (+ y 4.0)) "Inverter & Neutral Earthing Pit" 0.11 "PV_SLD" 8 0.0)
+
+      ;; Earth Pit #3 (Lightning Arrester)
+      (pv:draw-circle (list (+ x 29.5) (+ y 5.2)) 0.35 "PV_SLD" 3)
+      (pv:draw-circle (list (+ x 29.5) (+ y 5.2)) 0.15 "PV_SLD" 3)
+      (pv:draw-line (list (+ x 29.5) (+ y 5.2)) (list (+ x 29.5) (+ y 4.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 29.1) (+ y 4.5)) (list (+ x 29.9) (+ y 4.5)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 29.25) (+ y 4.35)) (list (+ x 29.75) (+ y 4.35)) "PV_SLD" 3)
+      (pv:draw-line (list (+ x 29.4) (+ y 4.2)) (list (+ x 29.6) (+ y 4.2)) "PV_SLD" 3)
+      (pv:draw-text (list (+ x 27.0) (+ y 6.4)) "EARTH PIT #3 (LIGHTNING ARRESTER)" 0.14 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 27.0) (+ y 6.0)) "25x3 mm Copper Strip | R < 5.0 Ohms" 0.12 "PV_SLD" 3 0.0)
+      (pv:draw-text (list (+ x 27.0) (+ y 4.0)) "Dedicated LA Earth Pit (IS/IEC 62305)" 0.11 "PV_SLD" 8 0.0)
+
+      ;; Inter-Pit Segregation Annotation Line
+      (pv:draw-line (list (+ x 4.5) (+ y 4.9)) (list (+ x 16.5) (+ y 4.9)) "PV_SLD" 8)
+      (pv:draw-text (list (+ x 8.0) (+ y 5.1)) "|<--- Min. 3.0m Separation (IS 3043) --->|" 0.12 "PV_SLD" 8 0.0)
+      (pv:draw-line (list (+ x 16.5) (+ y 4.9)) (list (+ x 29.5) (+ y 4.9)) "PV_SLD" 8)
+      (pv:draw-text (list (+ x 20.5) (+ y 5.1)) "|<--- Min. 3.0m Separation (IS 3043) --->|" 0.12 "PV_SLD" 8 0.0)
+
+      ;; 7. Cable Schedule & Engineering Legend Box
+      (pv:draw-lwpolyline
+        (list (list (+ x 0.8) (+ y 0.8)) (list (+ x (- W 0.8)) (+ y 0.8))
+              (list (+ x (- W 0.8)) (+ y 3.5)) (list (+ x 0.8) (+ y 3.5)))
+        "PV_SLD" 8 t)
+      (pv:draw-text (list (+ x 1.2) (+ y 3.1))
+                    "SYSTEM SPECIFICATIONS, CABLE SCHEDULE & REGULATORY COMPLIANCE NOTES (INDIA):"
+                    0.16 "PV_SLD" 2 0.0)
+      (pv:draw-text (list (+ x 1.2) (+ y 2.55))
+                    "1. DC Strings Cable  : 1C x 4/6 sq.mm Annealed Tinned Copper, XLPO insulated (EN 50618 / IS 17293), 1500V DC, UV-resistant, routed in perforated HDG trays."
+                    0.12 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 1.2) (+ y 2.05))
+                    "2. AC Power Cable    : 4C x 50 sq.mm XLPE insulated, Galvanised Steel Strip Armoured Aluminum Cable, 1.1kV grade conforming to IS 7098 (Part 1)."
+                    0.12 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 1.2) (+ y 1.55))
+                    "3. Earthing System   : 3 Distinct Chemical Earth Pits with Maintenance-Free Backfill Compound (BFC) as per IS 3043:2018; Inter-pit spacing >= 3.0 meters."
+                    0.12 "PV_SLD" 7 0.0)
+      (pv:draw-text (list (+ x 1.2) (+ y 1.05))
+                    "4. Grid Interface    : Anti-islanding tripping < 2.0s per IS 16169; Lockable manual GOS switch with visible break provided for DISCOM lineman safety."
+                    0.12 "PV_SLD" 7 0.0)
+
+      (princ (strcat "\n[SolarPV] Indian Standard Single Line Diagram (SLD) successfully generated at (" 
+                     (rtos x 2 2) ", " (rtos y 2 2) ")."))
+      (alert (strcat "Indian Standard Single Line Diagram (SLD) Generated!\n\n"
+                     "Plant Capacity: " (rtos plant-kw 2 1) " kWp (DC)\n"
+                     "Inverter: " (rtos inv-kw 2 0) " kW AC (" *PV_INV_MFG* " " *PV_INV_MODEL* ")\n"
+                     "Sanctioned Load: " (rtos *PV_SANCTIONED_LOAD* 2 1) " kW (" *PV_GRID_VOLTAGE* ")\n"
+                     "Total Strings: " (itoa str-count) " (" (itoa mods-per-str) " modules/string)\n\n"
+                     "Features Included:\n"
+                     " - Array Junction Box (AJB/DCDB IP65) with Fuses & SPD\n"
+                     " - ACDB with 4-Pole MCCB & Type II SPD\n"
+                     " - Solar Generation Check Meter (CEA Regulations 2023)\n"
+                     " - DISCOM Manual GOS Isolator (Visible Air-Gap & Padlock)\n"
+                     " - Bi-Directional Net Meter\n"
+                     " - 3 Distinct Chemical Earth Pits with 3m separation (IS 3043:2018)\n\n"
+                     "Publication-ready schematic generated on layer 'PV_SLD'."))
     )
   )
   (princ)
@@ -4471,22 +4970,7 @@
 ;;; ==========================================================================
 ;;; 4. 3D ISOMETRIC VISUALIZATION & SHADING PRUNER (PVcase & ARKA 360 Style)
 ;;; ==========================================================================
-(defun pv:draw-3dface (p1 p2 p3 p4 layer color / ent-data)
-  (setq ent-data
-    (list
-      '(0 . "3DFACE")
-      '(100 . "AcDbEntity")
-      (cons 8 layer)
-      (cons 62 color)
-      '(100 . "AcDbFace")
-      (cons 10 (list (car p1) (cadr p1) (if (caddr p1) (caddr p1) 0.0)))
-      (cons 11 (list (car p2) (cadr p2) (if (caddr p2) (caddr p2) 0.0)))
-      (cons 12 (list (car p3) (cadr p3) (if (caddr p3) (caddr p3) 0.0)))
-      (cons 13 (list (car p4) (cadr p4) (if (caddr p4) (caddr p4) 0.0)))
-    )
-  )
-  (entmakex ent-data)
-)
+;; Note: pv:draw-3dface is defined at line 990 (duplicate removed)
 
 (defun c:pv-clear-building-3d (/ ss i)
   (if (setq ss (ssget "X" '((8 . "PV_3D_BUILDING,PV_3D_ROOF_OUTLINE,PV_3D_ROOF_FACE,PV_3D_PARAPET"))))
@@ -4518,56 +5002,7 @@
   (princ)
 )
 
-(defun pv:get-roof-z (pt bbox / x y x1 y1 x2 y2 xc yc span-x span-y h-ridge h-eaves dx dy d-norm)
-  (setq x (car pt)
-        y (cadr pt))
-  (if (not bbox) (setq bbox (pv:get-roof-bbox)))
-  (if bbox
-    (setq x1 (caar bbox)
-          y1 (cadar bbox)
-          x2 (caadr bbox)
-          y2 (cadadr bbox)
-          xc (/ (+ x1 x2) 2.0)
-          yc (/ (+ y1 y2) 2.0)
-          span-x (max 0.1 (- x2 x1))
-          span-y (max 0.1 (- y2 y1)))
-    (setq x1 0.0 y1 0.0 x2 100.0 y2 100.0 xc 50.0 yc 50.0 span-x 100.0 span-y 100.0)
-  )
-  (setq h-ridge (if (> *PV_BLDG_RIDGE_HT* 0.0) *PV_BLDG_RIDGE_HT* 8.0)
-        h-eaves (if (> *PV_BLDG_EAVES_HT* 0.0) *PV_BLDG_EAVES_HT* 6.0))
-  (cond
-    ;; Flat RCC
-    ((or (= *PV_ROOF_TYPE* "Flat RCC Rooftop") (= *PV_ROOF_SLOPE_DIRS* 0))
-     h-eaves)
-    ;; 1 Direction (Monoslope / Shed)
-    ((= *PV_ROOF_SLOPE_DIRS* 1)
-     (cond
-       ((or (= *PV_ROOF_FACING* "South") (= *PV_ROOF_FACING* "S"))
-        (+ h-eaves (* (/ (max 0.0 (min span-y (- y y1))) span-y) (- h-ridge h-eaves))))
-       ((or (= *PV_ROOF_FACING* "North") (= *PV_ROOF_FACING* "N"))
-        (- h-ridge (* (/ (max 0.0 (min span-y (- y y1))) span-y) (- h-ridge h-eaves))))
-       ((or (= *PV_ROOF_FACING* "West") (= *PV_ROOF_FACING* "W"))
-        (+ h-eaves (* (/ (max 0.0 (min span-x (- x x1))) span-x) (- h-ridge h-eaves))))
-       (t ; East
-        (- h-ridge (* (/ (max 0.0 (min span-x (- x x1))) span-x) (- h-ridge h-eaves))))
-     ))
-    ;; 2 Directions (Dual-Pitch / Gable)
-    ((= *PV_ROOF_SLOPE_DIRS* 2)
-     (cond
-       ((or (= *PV_ROOF_FACING* "North & South") (= *PV_ROOF_FACING* "North-South") (= *PV_ROOF_FACING* "NS"))
-        (- h-ridge (* (/ (abs (- y yc)) (max 0.1 (/ span-y 2.0))) (- h-ridge h-eaves))))
-       (t ; East & West
-        (- h-ridge (* (/ (abs (- x xc)) (max 0.1 (/ span-x 2.0))) (- h-ridge h-eaves))))
-     ))
-    ;; 4 Directions (Hip Roof)
-    ((= *PV_ROOF_SLOPE_DIRS* 4)
-     (setq dx (/ (abs (- x xc)) (max 0.1 (/ span-x 2.0)))
-           dy (/ (abs (- y yc)) (max 0.1 (/ span-y 2.0)))
-           d-norm (min 1.0 (max dx dy)))
-     (- h-ridge (* d-norm (- h-ridge h-eaves))))
-    (t h-eaves)
-  )
-)
+;; pv:get-roof-z defined at line 585 (duplicate removed)
 
 (defun pv:build-single-3d-building (b-ent / pts bbox x1 y1 x2 y2 xc yc span-x span-y
                                             n i p-curr p-next z-curr z-next h-ridge h-eaves
@@ -5300,10 +5735,35 @@
 ;;; ==========================================================================
 ;;; 5. FINANCIAL ROI ENGINE & PVSYST 3D EXPORT (ARKA 360 Style)
 ;;; ==========================================================================
-(defun pv:calc-financial-roi (plant-kw yr1-kwh / capex yr1-savings yr1-om net-yr1-savings
+(defun pv:calc-financial-roi (plant-kw yr1-kwh / capex gross-capex subsidy net-capex
+                                                  yr1-savings yr1-om net-yr1-savings ad-tax-shield
                                                   payback cum-savings cum-gen yr yr-gen yr-tariff
                                                   yr-om yr-net lcoe roi)
-  (setq capex (* plant-kw 1000.0 *PV_EPC_COST_PER_W*))
+  (setq gross-capex (* plant-kw 1000.0 *PV_EPC_COST_PER_W*))
+  ;; Apply Indian GST (blended 13.8%)
+  (if (and (boundp '*PV_GST_RATE*) (> *PV_GST_RATE* 0.0))
+    (setq gross-capex (* gross-capex (+ 1.0 (/ *PV_GST_RATE* 100.0))))
+  )
+  ;; Apply PM Surya Ghar Central Subsidy (India residential: 1kW=30k, 2kW=60k, >=3kW=78k)
+  (setq subsidy
+    (if (and (boundp '*PV_PM_SURYA_GHAR*) (= *PV_PM_SURYA_GHAR* 1))
+      (cond
+        ((<= plant-kw 1.2) 30000.0)
+        ((<= plant-kw 2.2) 60000.0)
+        (t (if (and (boundp '*PV_SUBSIDY_RS*) (> *PV_SUBSIDY_RS* 0.0)) *PV_SUBSIDY_RS* 78000.0))
+      )
+      0.0
+    )
+  )
+  ;; Apply Commercial 40% Accelerated Depreciation tax shield in Year 1 (Corporate tax ~25%)
+  (setq ad-tax-shield
+    (if (and (boundp '*PV_COMMERCIAL_AD*) (= *PV_COMMERCIAL_AD* 1))
+      (* gross-capex 0.40 0.25)
+      0.0
+    )
+  )
+  (setq net-capex (max 1000.0 (- gross-capex subsidy ad-tax-shield)))
+  (setq capex net-capex)
   (setq yr1-savings (* yr1-kwh *PV_GRID_TARIFF*))
   (setq yr1-om (* capex (/ *PV_OPEX_PERCENT* 100.0)))
   (setq net-yr1-savings (- yr1-savings yr1-om))
@@ -5336,7 +5796,7 @@
       (alert "No PV modules found on module layers.\nPlease generate layout before exporting to PVsyst.")
     )
     (progn
-      (setq csv-path "d:\\VibeCoding\\AUTOLISP\\Rooftop\\PVsyst_3D_Layout.csv")
+      (setq csv-path (strcat (if (getvar "DWGPREFIX") (getvar "DWGPREFIX") "C:\\Temp\\") "PVsyst_3D_Layout.csv"))
       (setq f (open csv-path "w"))
       (if (not f)
         (progn
@@ -6224,6 +6684,14 @@
                              bbox x1 y1 x2 y2 xc yc ridge-sb eaves-sb slope-sel sub-zones
                              south-poly north-poly west-poly east-poly zn z-poly z-name)
   (pv:init-layers)
+  ;; Validate critical inputs
+  (if (or (null *PV_LAT*) (null *PV_LON*) (null *PV_TILT*) (null *PV_AZIMUTH*))
+    (progn
+      (princ "\n[ERROR] Missing required parameters: Latitude, Longitude, Tilt, Azimuth")
+      (princ "\nPlease set these values first using the configuration dialog")
+      (exit)
+    )
+  )
   ;; Ensure roofs exist
   (if (not *PV_BOUNDARY_LIST*)
     (if (setq ss-bnd (ssget "X" '((0 . "LWPOLYLINE,POLYLINE,REGION") (8 . "PV_BOUNDARY"))))
@@ -6754,8 +7222,24 @@
   (if (not pt) (setq pt '(0.0 0.0 0.0)))
 
   (setq plant-kw (/ (* *PV_MODULE_COUNT* *PV_MOD_WATT*) 1000.0))
-  (setq end-clamps (* *PV_TABLE_COUNT* *PV_TABLE_ROWS* 4))
-  (setq mid-clamps (max 0 (* *PV_TABLE_COUNT* *PV_TABLE_ROWS* (- *PV_TABLE_COLS* 1) 2)))
+
+  ;; End clamps: 2 per table end = 4 per table
+  ;; For elevated with continuous rails: 4 per table (not per row)
+  ;; For flush mount: 4 per table row
+  (setq end-clamps
+    (if (wcmatch (strcase *PV_MOUNT_OPT*) "*ELEVATED*")
+      (* *PV_TABLE_COUNT* 4)  ; Continuous rail system
+      (* *PV_TABLE_COUNT* *PV_TABLE_ROWS* 4)  ; Discrete tables
+    )
+  )
+
+  ;; Mid clamps: (cols-1) gaps per row * 2 clamps per gap * number of rows * tables
+  (setq mid-clamps
+    (if (wcmatch (strcase *PV_MOUNT_OPT*) "*ELEVATED*")
+      (* *PV_TABLE_COUNT* *PV_TABLE_ROWS* (max 0 (- *PV_TABLE_COLS* 1)) 2)  ; Elevated continuous
+      (* *PV_TABLE_COUNT* *PV_TABLE_ROWS* (max 0 (- *PV_TABLE_COLS* 1)) 2)  ; Flush mount
+    )
+  )
   
   (if (wcmatch (strcase *PV_MOUNT_OPT*) "*ELEVATED*")
     (setq rails-count (* *PV_TABLE_COUNT* *PV_TABLE_ROWS* 2)
@@ -6786,8 +7270,20 @@
                     (strcat "Hot Dip Galvanized Heavy Duty Tubular Columns (Clearance=" (rtos *PV_ELEV_MIN_CLEAR* 2 1) "m)")
                     "Hot Dip Galvanized / Ballast Blocks")
                 (itoa mms-legs) "Sets")
-      (list "9" "Solar DC Array Cable" "4 sq.mm UV Resistant Copper Solar Cable" (itoa (fix (* *PV_MODULE_COUNT* 3.2))) "Mtr")
+      (list "9" "Solar DC Array Cable" "4 sq.mm UV Resistant Copper Solar Cable (IS 17293)" (itoa (fix (* *PV_MODULE_COUNT* 3.2))) "Mtr")
       (list "10" "MC4 Connectors" "1500V DC IP68 Rated Male & Female" (itoa (* *PV_TABLE_COUNT* 4)) "Pairs")
+      (list "11" "Array Junction Box (AJB/DCDB)" "IP65 Polycarbonate w/ 1000V DC Fuses & Type-II SPD" (itoa (max 1 (fix (+ (/ *PV_MODULE_COUNT* 40.0) 0.5)))) "Nos")
+      (list "12" "AC Distribution Box (ACDB)" "IP65 Enclosure w/ 4-Pole MCCB, Type-II SPD & MFM" (itoa (if (> *PV_INV_COUNT* 0) *PV_INV_COUNT* 1)) "Nos")
+      (list "13" "DISCOM Manual GOS Switch" "4-Pole Lockable Gang-Operated Isolator (Visible Air Gap)" "1" "Set")
+      (list "14" "Chemical Earth Electrodes" "17.2mm dia x 3.0m Cu-Bonded Steel Rods (IS 3043:2018)" "3" "Sets")
+      (list "15" "Earth Enhancement Compound" "Bentonite / Carbon BFC Compound Bags (25 kg)" "6" "Bags")
+      (list "16" "Main Earthing Flat / Strip" "25x3 mm Hot Dip Galvanized / Copper Strip (IS 3043)" "75" "Mtr")
+      (list "17" "Module Equipotential Wire" "8 SWG Bare Copper Earthing Wire" (itoa (fix (* *PV_MODULE_COUNT* 1.2))) "Mtr")
+      (list "18" "Lightning Arrester (LA)" "Early Streamer Emission (ESE) / Franklin 2.5m Mast (IS 62305)" "1" "Set")
+      (list "19" "AC Feeder Cable" "3.5C / 4C Armoured Aluminum XLPE Cable (IS 7098 Pt 1)" "45" "Mtr")
+      (list "20" "Perforated HDG Cable Tray" "150mm/300mm Hot Dip Galvanized Tray w/ Cover (UV Shield)" (itoa (fix (if (> *PV_CABLE_TRAY_LENGTH* 0.0) *PV_CABLE_TRAY_LENGTH* 30.0))) "Mtr")
+      (list "21" "Dual Energy Metering" "Bi-directional Net Meter + Solar Check Meter (DLMS)" "2" "Nos")
+      (list "22" "Statutory Safety Signage" "415V Danger Plates, Caution Solar PV, Fire Extinguishers" "1" "Lot")
     )
   )
 
@@ -6999,12 +7495,7 @@
 ;;; Interactive DCL Dialog Drivers
 ;;; --------------------------------------------------------------------------
 
-(defun pv:file-exists-p (filepath / fh)
-  (if (and filepath (/= filepath "") (setq fh (open filepath "r")))
-    (progn (close fh) filepath)
-    nil
-  )
-)
+;; pv:file-exists-p defined at line 1323 (duplicate removed)
 
 (defun pv:get-dcl-path (/ dcl-path app-dir)
   (setq app-dir (pv:get-app-dir))
@@ -7115,7 +7606,10 @@
               (action_tile "f_dc_schedule"   "(done_dialog 40)")
               (action_tile "f_clr_strings"   "(done_dialog 22)")
               (action_tile "f_inverter"      "(done_dialog 23)")
-              (action_tile "f_place_inverter""(done_dialog 23)")
+              (action_tile "f_ajb"           "(done_dialog 68)")
+              (action_tile "f_earthing"      "(done_dialog 66)")
+              (action_tile "f_lightning"     "(done_dialog 67)")
+              (action_tile "f_clr_earthing"  "(done_dialog 70)")
               (action_tile "f_cable_tray"    "(done_dialog 24)")
               (action_tile "f_sld"           "(done_dialog 26)")
               (action_tile "f_3d_view"       "(done_dialog 27)")
@@ -7128,7 +7622,16 @@
               (action_tile "f_sim_report"    "(done_dialog 6)")
               (action_tile "f_export_csv"    "(done_dialog 7)")
               (action_tile "f_open_designer" "(done_dialog 20)")
-              (action_tile "cancel"          "(done_dialog 0)")
+              ;; New dispatcher buttons
+              (action_tile "f_show_hide_offset" "(done_dialog 49)")
+              (action_tile "f_walkway_auto"     "(done_dialog 60)")
+              (action_tile "f_clr_handrail"     "(done_dialog 19)")
+              (action_tile "f_clr_all"          "(done_dialog 61)")
+              (action_tile "f_clr_3d"           "(done_dialog 62)")
+              (action_tile "f_clr_bldg"         "(done_dialog 63)")
+              (action_tile "f_clr_cabletray"    "(done_dialog 64)")
+              (action_tile "f_elev_toggle"      "(done_dialog 65)")
+              (action_tile "cancel"             "(done_dialog 0)")
 
               (setq what-next (start_dialog))
               (unload_dialog dcl-id)
@@ -7189,6 +7692,32 @@
                 ((= what-next 6)  (c:pv-report-energy))
                 ((= what-next 7)  (c:pv-export-csv))
                 ((= what-next 20) (pv:full-designer-dialog))
+                ;; New dispatcher dialog IDs
+                ((= what-next 49) (c:pv-hide-all-offset))    ; Show/Hide Parapet
+                ((= what-next 60) (c:pv-toggle-auto-walkway)); Auto Walkway toggle
+                ((= what-next 19) (c:pv-clear-handrails))    ; Clear Handrails
+                ((= what-next 61)                             ; Clear Everything
+                 (progn
+                   (c:pv-clear-layout)
+                   (c:pv-clear-strings)
+                   (c:pv-clear-walkways)
+                   (c:pv-clear-handrails)
+                   (c:pv-clear-cable-tray)
+                   (c:pv-clear-3d)
+                   (c:pv-clear-building-3d)
+                   (c:pv-clear-obstacles)
+                   (c:pv-clear-earthing)
+                   (princ "\n[SolarPV] All elements cleared.")
+                 ))
+                ((= what-next 62) (c:pv-clear-3d))           ; Clear 3D
+                ((= what-next 63) (c:pv-clear-building-3d))  ; Clear 3D Building
+                ((= what-next 64) (c:pv-clear-cable-tray))   ; Clear Cable Tray
+                ((= what-next 65) (c:pv-elev-toggle))        ; Elevated toggle
+                ((= what-next 66) (c:pv-earthing))           ; IS 3043 Chemical Earthing
+                ((= what-next 67) (c:pv-lightning))          ; IS/IEC 62305 Lightning Arrester
+                ((= what-next 68) (c:pv-place-ajb))          ; Place Array Junction Box
+                ((= what-next 69) (c:pv-place-acdb))         ; Place ACDB & DISCOM Switch
+                ((= what-next 70) (c:pv-clear-earthing))     ; Clear Earthing & LA
                 (t
                   (setq loop nil)
                   (princ "\n[SolarPV] Master Control Center closed.")
@@ -7375,6 +7904,57 @@
       (set_tile "lon_val"         (rtos *PV_LON* 2 4))
       (set_tile "tilt_angle"      (rtos *PV_TILT* 2 1))
       (set_tile "azimuth_angle"   (rtos *PV_AZIMUTH* 2 1))
+      ;; Indian Regulatory & Structural Parameters
+      (if (get_tile "sanctioned_load_kw")
+        (set_tile "sanctioned_load_kw" (rtos (if (and (boundp '*PV_SANCTIONED_LOAD*) *PV_SANCTIONED_LOAD*) *PV_SANCTIONED_LOAD* 25.0) 2 1))
+      )
+      (if (get_tile "contract_demand_kva")
+        (set_tile "contract_demand_kva" (rtos (if (and (boundp '*PV_CONTRACT_DEMAND*) *PV_CONTRACT_DEMAND*) *PV_CONTRACT_DEMAND* 28.0) 2 1))
+      )
+      (if (get_tile "grid_voltage_opt")
+        (progn
+          (start_list "grid_voltage_opt")
+          (add_list "3-Phase 415V 50Hz (5-100 kW)")
+          (add_list "1-Phase 230V 50Hz (< 3-5 kW)")
+          (add_list "HT 11 kV / 33 kV (> 100 kW)")
+          (end_list)
+          (set_tile "grid_voltage_opt"
+            (cond
+              ((wcmatch (strcase (if (boundp '*PV_GRID_VOLTAGE*) *PV_GRID_VOLTAGE* "")) "*230V*") "1")
+              ((wcmatch (strcase (if (boundp '*PV_GRID_VOLTAGE*) *PV_GRID_VOLTAGE* "")) "*HT*") "2")
+              (t "0")
+            )
+          )
+        )
+      )
+      (if (get_tile "wind_zone_opt")
+        (progn
+          (start_list "wind_zone_opt")
+          (add_list "Zone I (33 m/s - Bengaluru/Pune)")
+          (add_list "Zone II (39 m/s - Hyderabad/Nagpur)")
+          (add_list "Zone III (44 m/s - Delhi/Mumbai)")
+          (add_list "Zone IV (47 m/s - Chennai/Kolkata)")
+          (add_list "Zone V (50 m/s - Coastal Odisha/AP)")
+          (add_list "Zone VI (55 m/s - Cyclonic Belt)")
+          (end_list)
+          (set_tile "wind_zone_opt"
+            (cond
+              ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE I *") "0")
+              ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE II *") "1")
+              ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE IV*") "3")
+              ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE V *") "4")
+              ((wcmatch (strcase (if (boundp '*PV_WIND_ZONE*) *PV_WIND_ZONE* "")) "*ZONE VI*") "5")
+              (t "2")
+            )
+          )
+        )
+      )
+      (if (get_tile "ambient_temp_max")
+        (set_tile "ambient_temp_max" (rtos (if (and (boundp '*PV_AMBIENT_TEMP*) *PV_AMBIENT_TEMP*) *PV_AMBIENT_TEMP* 45.0) 2 1))
+      )
+      (if (get_tile "temp_min_c")
+        (set_tile "temp_min_c" (rtos (if (and (boundp '*PV_TEMP_MIN*) *PV_TEMP_MIN*) *PV_TEMP_MIN* 8.0) 2 1))
+      )
       (set_tile "roof_setback"    (rtos *PV_SETBACK* 2 2))
       (set_tile "roof_slope"      (rtos *PV_ROOF_SLOPE* 2 1))
       (set_tile "mod_clearance"   (rtos *PV_MOD_CLEAR* 2 2))
@@ -7551,6 +8131,12 @@
       (set_tile "currency_select" (itoa *PV_CURRENCY_IDX*))
       (set_tile "grid_tariff"   (rtos *PV_GRID_TARIFF* 2 2))
       (set_tile "epc_cost_watt" (rtos *PV_EPC_COST_PER_W* 2 2))
+      (if (get_tile "subsidy_rs")
+        (set_tile "subsidy_rs" (rtos *PV_SUBSIDY_RS* 2 0)))
+      (if (get_tile "chk_commercial_ad")
+        (set_tile "chk_commercial_ad" (if *PV_COMMERCIAL_AD* "1" "0")))
+      (if (get_tile "gst_rate")
+        (set_tile "gst_rate" (rtos *PV_GST_RATE* 2 1)))
       (pv:update-financial-status-tile)
     )
 
@@ -7635,7 +8221,11 @@
       (action_tile "btn_stringing"      "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 21)")
       (action_tile "btn_clear_strings"  "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 22)")
       (action_tile "btn_place_inverter" "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 23)")
+      (action_tile "btn_place_ajb"      "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 68)")
+      (action_tile "btn_place_acdb"     "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 69)")
       (action_tile "btn_cable_tray"     "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 24)")
+      (action_tile "btn_earthing"       "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 66)")
+      (action_tile "btn_lightning"      "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 67)")
       (action_tile "btn_sld"            "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 26)")
       (action_tile "btn_3d_view"        "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 27)")
       (action_tile "btn_prune_shaded"   "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 28)")
@@ -7648,6 +8238,9 @@
       (action_tile "currency_select"      "(pv:on-currency-select)")
       (action_tile "grid_tariff"          "(pv:save-tab-values *PV_CURRENT_TAB*) (pv:update-financial-status-tile)")
       (action_tile "epc_cost_watt"        "(pv:save-tab-values *PV_CURRENT_TAB*) (pv:update-financial-status-tile)")
+      (action_tile "subsidy_rs"           "(pv:save-tab-values *PV_CURRENT_TAB*) (pv:update-financial-status-tile)")
+      (action_tile "chk_commercial_ad"    "(pv:save-tab-values *PV_CURRENT_TAB*) (pv:update-financial-status-tile)")
+      (action_tile "gst_rate"             "(pv:save-tab-values *PV_CURRENT_TAB*) (pv:update-financial-status-tile)")
       (action_tile "btn_gen_energy_table" "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 13)")
       (action_tile "btn_gen_bom"          "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 5)")
       (action_tile "btn_gen_energy"       "(pv:save-tab-values *PV_CURRENT_TAB*) (done_dialog 6)")
@@ -7678,6 +8271,31 @@
       (if (get_tile "lon_val")         (setq *PV_LON* (atof (get_tile "lon_val"))))
       (if (get_tile "tilt_angle")      (setq *PV_TILT* (atof (get_tile "tilt_angle"))))
       (if (get_tile "azimuth_angle")   (setq *PV_AZIMUTH* (atof (get_tile "azimuth_angle"))))
+      (if (get_tile "sanctioned_load_kw") (setq *PV_SANCTIONED_LOAD* (atof (get_tile "sanctioned_load_kw"))))
+      (if (get_tile "contract_demand_kva") (setq *PV_CONTRACT_DEMAND* (atof (get_tile "contract_demand_kva"))))
+      (if (get_tile "grid_voltage_opt")
+        (setq *PV_GRID_VOLTAGE*
+          (cond
+            ((= (get_tile "grid_voltage_opt") "1") "230V 1-Phase 50Hz")
+            ((= (get_tile "grid_voltage_opt") "2") "HT 11 kV / 33 kV")
+            (t "415V 3-Phase 50Hz")
+          )
+        )
+      )
+      (if (get_tile "wind_zone_opt")
+        (setq *PV_WIND_ZONE*
+          (cond
+            ((= (get_tile "wind_zone_opt") "0") "Zone I (33 m/s)")
+            ((= (get_tile "wind_zone_opt") "1") "Zone II (39 m/s)")
+            ((= (get_tile "wind_zone_opt") "3") "Zone IV (47 m/s)")
+            ((= (get_tile "wind_zone_opt") "4") "Zone V (50 m/s)")
+            ((= (get_tile "wind_zone_opt") "5") "Zone VI (55 m/s)")
+            (t "Zone III (44 m/s)")
+          )
+        )
+      )
+      (if (get_tile "ambient_temp_max") (setq *PV_AMBIENT_TEMP* (atof (get_tile "ambient_temp_max"))))
+      (if (get_tile "temp_min_c") (setq *PV_TEMP_MIN* (atof (get_tile "temp_min_c"))))
       (if (get_tile "roof_type")       (setq *PV_ROOF_TYPE* (if (= (get_tile "roof_type") "0") "Flat RCC Rooftop" "Metal Sheet Rooftop")))
       (if (get_tile "mount_option")
         (setq *PV_MOUNT_OPT*
@@ -7827,6 +8445,15 @@
       )
       (if (and (get_tile "epc_cost_watt") (> (atof (get_tile "epc_cost_watt")) 0.0))
         (setq *PV_EPC_COST_PER_W* (atof (get_tile "epc_cost_watt")))
+      )
+      (if (get_tile "subsidy_rs")
+        (setq *PV_SUBSIDY_RS* (atof (get_tile "subsidy_rs")))
+      )
+      (if (get_tile "chk_commercial_ad")
+        (setq *PV_COMMERCIAL_AD* (= (get_tile "chk_commercial_ad") "1"))
+      )
+      (if (get_tile "gst_rate")
+        (setq *PV_GST_RATE* (atof (get_tile "gst_rate")))
       )
     )
 
@@ -8119,6 +8746,11 @@
                     ((= what-next 23) (c:pv-place-inverter))
                     ((= what-next 24) (c:pv-draw-cable-tray))
                     ((= what-next 26) (c:pv-draw-sld))
+                    ((= what-next 66) (c:pv-earthing))
+                    ((= what-next 67) (c:pv-lightning))
+                    ((= what-next 68) (c:pv-place-ajb))
+                    ((= what-next 69) (c:pv-place-acdb))
+                    ((= what-next 70) (c:pv-clear-earthing))
                     ((= what-next 27) (c:pv-3d-view))
                     ((= what-next 28) (c:pv-prune-shaded))
                     ((= what-next 29) (c:pv-export-pvsyst))
@@ -8198,111 +8830,338 @@
 )
 
 ;;; ==========================================================================
-;;; Command Aliases & Shortcuts
+;;; Command Dispatchers  (18 groups, replaces 101 flat aliases)
 ;;; ==========================================================================
-;; Master Functions Hub (Control Center)
-(defun c:PVMENU ()     (c:pv-menu))
-(defun c:PVDCL ()      (c:pv-menu))
-(defun c:PVCOMMANDS () (c:pv-menu))
-(defun c:PVHUB ()      (c:pv-menu))
 
-;; Full Designer Dialog & Aliases (All calling pv:full-designer-dialog - NO recursion)
+;;; ---------- GROUP 1: Entry / Main Designer (9 → 1) -----------------------
+(defun c:PVSOLAR   () (pv:full-designer-dialog))
+;; Backward-compatible aliases
+(defun c:PVMENU       () (c:pv-menu))
 (defun c:ROOFTOPSOLAR () (pv:full-designer-dialog))
-(defun c:RooftopSolar () (pv:full-designer-dialog))
-(defun c:SOLARTOOLS ()   (pv:full-designer-dialog))
-(defun c:SOLARPV ()      (pv:full-designer-dialog))
-(defun c:SOLARLAYOUT ()  (pv:full-designer-dialog))
+(defun c:SOLARPV      () (pv:full-designer-dialog))
+(defun c:SOLARTOOLS   () (pv:full-designer-dialog))
+(defun c:SOLARLAYOUT  () (pv:full-designer-dialog))
+(defun c:PVDCL        () (c:pv-menu))
+(defun c:PVCOMMANDS   () (c:pv-menu))
+(defun c:PVHUB        () (c:pv-menu))
 
-;; Walkway Commands
-(defun c:PVWALKWAY () (c:pv-walkway))
-(defun c:PVWALKWAYPATH () (c:pv-walkway))
-(defun c:PVCLEARWALKWAY () (c:pv-clear-walkways))
-(defun c:PVCLEARWALKWAYS () (c:pv-clear-walkways))
+;;; ---------- GROUP 2: Layout Generation (4 → 1) ---------------------------
+(defun c:PVLAYOUTGEN (/ mode)
+  (initget "Auto EW")
+  (setq mode (getkword "\nLayout mode [Auto/EW] <Auto>: "))
+  (if (= mode "EW") (c:pv-layout-ew) (c:pv-generate-layout))
+)
+(defun c:PVLAYOUT  () (c:pv-generate-layout))
+(defun c:PVLAYOUTEW () (c:pv-layout-ew))
+
+;;; ---------- GROUP 3: Stringing (10 → 2) ----------------------------------
+(defun c:PVSTRING (/ mode)
+  (initget "Auto Manual EW Vis Polarity Mppt panelNum")
+  (setq mode (getkword "\nStringing mode [Auto/Manual/EW/Vis/Polarity/Mppt/panelNum] <Auto>: "))
+  (cond
+    ((= mode "Manual")    (c:pv-string-manual))
+    ((= mode "EW")        (c:pv-string-ew))
+    ((= mode "Vis")       (c:pv-string-vis))
+    ((= mode "Polarity")  (c:pv-polarity))
+    ((= mode "Mppt")      (c:pv-mppt-details))
+    ((= mode "panelNum")  (c:pv-panel-number))
+    (t                    (c:pv-stringing))
+  )
+)
+(defun c:PVMPPT (/ mode)
+  (initget "Details Link EW")
+  (setq mode (getkword "\nMPPT mode [Details/Link/EW] <Details>: "))
+  (cond
+    ((= mode "Link") (c:pv-mppt-link))
+    ((= mode "EW")   (c:pv-ew-vis))
+    (t               (c:pv-mppt-details))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVSTRINGING     () (c:pv-stringing))
+(defun c:PVSTRINGMANUAL  () (c:pv-string-manual))
+(defun c:PVSTRINGEW      () (c:pv-string-ew))
+(defun c:PVSTRINGVIS     () (c:pv-string-vis))
+(defun c:PVPOLARITY      () (c:pv-polarity))
+(defun c:PVPANELNUM      () (c:pv-panel-number))
+(defun c:PVEWVIS         () (c:pv-ew-vis))
+(defun c:PVMPPTDETAILS   () (c:pv-mppt-details))
+(defun c:PVMPPTLINK      () (c:pv-mppt-link))
+
+;;; ---------- GROUP 4: Clear / Reset (11 → 1) ------------------------------
+(defun c:PVCLEAR (/ mode)
+  (initget "Layout Strings Walkway Handrail CableTray Earthing 3d Building Obstacles All")
+  (setq mode (getkword "\nClear [Layout/Strings/Walkway/Handrail/CableTray/Earthing/3d/Building/Obstacles/All] <All>: "))
+  (cond
+    ((= mode "Layout")    (c:pv-clear-layout))
+    ((= mode "Strings")   (c:pv-clear-strings))
+    ((= mode "Walkway")   (c:pv-clear-walkways))
+    ((= mode "Handrail")  (c:pv-clear-handrails))
+    ((= mode "CableTray") (c:pv-clear-cable-tray))
+    ((= mode "Earthing")  (c:pv-clear-earthing))
+    ((= mode "3d")        (c:pv-clear-3d))
+    ((= mode "Building")  (c:pv-clear-building-3d))
+    ((= mode "Obstacles") (c:pv-clear-obstacles))
+    (t  ; All
+     (c:pv-clear-layout)
+     (c:pv-clear-strings)
+     (c:pv-clear-walkways)
+     (c:pv-clear-handrails)
+     (c:pv-clear-cable-tray)
+     (c:pv-clear-3d)
+     (c:pv-clear-building-3d)
+     (c:pv-clear-obstacles)
+     (princ "\n[SolarPV] All elements cleared.")
+    )
+  )
+  (princ)
+)
+;; Backward-compatible aliases
+(defun c:PVCLEARLAYOUT    () (c:pv-clear-layout))
+(defun c:PVCLEARSTRINGS   () (c:pv-clear-strings))
+(defun c:PVCLEARSTRING    () (c:pv-clear-strings))
+(defun c:PVCLEARWALKWAY   () (c:pv-clear-walkways))
+(defun c:PVCLEARWALKWAYS  () (c:pv-clear-walkways))
+(defun c:PVCLEARHANDRAIL  () (c:pv-clear-handrails))
+(defun c:PVCLEARHANDRAILS () (c:pv-clear-handrails))
+(defun c:PVCLEARCABLETRAY () (c:pv-clear-cable-tray))
+(defun c:PVCLEAREARTHING  () (c:pv-clear-earthing))
+(defun c:PVCLEAR3D        () (c:pv-clear-3d))
+(defun c:PVCLEARBLDG3D    () (c:pv-clear-building-3d))
+(defun c:PVCLEAROBSTACLES () (c:pv-clear-obstacles))
+
+;;; ---------- GROUP 5: 3D Modeling (6 → 1) ---------------------------------
+(defun c:PV3D (/ mode)
+  (initget "View Build Clear")
+  (setq mode (getkword "\n3D mode [View/Build/Clear] <View>: "))
+  (cond
+    ((= mode "Build") (c:pv-building-3d))
+    ((= mode "Clear") (c:pv-clear-3d))
+    (t                (c:pv-3d-view))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PV3DVIEW      () (c:pv-3d-view))
+(defun c:PVBUILDING3D  () (c:pv-building-3d))
+(defun c:PVBLDG3D      () (c:pv-building-3d))
+(defun c:PVROOFTYPE    () (c:pv-building-3d))
+
+;;; ---------- GROUP 6: Shadow Analysis (7 → 1) -----------------------------
+(defun c:PVSHADOW (/ mode)
+  (initget "Toggle On Off Prune")
+  (setq mode (getkword "\nShadow [Toggle/On/Off/Prune] <Toggle>: "))
+  (cond
+    ((= mode "On")     (c:pv-shadow-on))
+    ((= mode "Off")    (c:pv-shadow-off))
+    ((= mode "Prune")  (c:pv-prune-shaded))
+    (t                 (c:pv-toggle-shadow))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVSHADOWTOGGLE  () (c:pv-toggle-shadow))
+(defun c:PVTOGGLESHADOW  () (c:pv-toggle-shadow))
+(defun c:PVSHADOWMAP     () (c:pv-toggle-shadow))
+(defun c:PVSHADOWON      () (c:pv-shadow-on))
+(defun c:PVSHADOWOFF     () (c:pv-shadow-off))
+(defun c:PVPRUNESHADED   () (c:pv-prune-shaded))
+(defun c:PVCHECKSHADING  () (c:pv-prune-shaded))
+
+;;; ---------- GROUP 7: File Load / Component Library (6 → 1) ---------------
+(defun c:PVLOAD (/ mode)
+  (initget "Pan Ond Library")
+  (setq mode (getkword "\nLoad [Pan/Ond/Library] <Pan>: "))
+  (cond
+    ((= mode "Ond")     (c:pv-load-ond))
+    ((= mode "Library") (c:pv-complib))
+    (t                  (c:pv-load-pan))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVLOADPAN  () (c:pv-load-pan))
+(defun c:PVPAN      () (c:pv-load-pan))
+(defun c:PVLOADOND  () (c:pv-load-ond))
+(defun c:PVOND      () (c:pv-load-ond))
+(defun c:PVCOMPLIB  () (c:pv-complib))
+(defun c:PVLIBRARY  () (c:pv-complib))
+
+;;; ---------- GROUP 8: Walkway (4 → 1) -------------------------------------
+(defun c:PVWALKWAY (/ mode)
+  (initget "Draw Auto Clear")
+  (setq mode (getkword "\nWalkway [Draw/Auto/Clear] <Draw>: "))
+  (cond
+    ((= mode "Auto")  (c:pv-toggle-auto-walkway))
+    ((= mode "Clear") (c:pv-clear-walkways))
+    (t                (c:pv-walkway))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVWALKWAYPATH   () (c:pv-walkway))
 (defun c:PVWALKWAYTOGGLE () (c:pv-toggle-auto-walkway))
-(defun c:PVAUTOWALKWAY () (c:pv-toggle-auto-walkway))
+(defun c:PVAUTOWALKWAY   () (c:pv-toggle-auto-walkway))
 
-;; Individual Functions
-(defun c:PVLOADPAN () (c:pv-load-pan))
-(defun c:PVPAN () (c:pv-load-pan))
-(defun c:PVLOADOND () (c:pv-load-ond))
-(defun c:PVOND () (c:pv-load-ond))
+;;; ---------- GROUP 9: Safety Systems (3 → 1) ------------------------------
+(defun c:PVSAFETY (/ mode)
+  (initget "FallSafety Handrail Clear")
+  (setq mode (getkword "\nSafety [FallSafety/Handrail/Clear] <FallSafety>: "))
+  (cond
+    ((= mode "Handrail") (c:pv-handrail))
+    ((= mode "Clear")    (c:pv-clear-handrails))
+    (t                   (c:pv-fall-safety))
+  )
+)
+;; Backward-compatible aliases
 (defun c:PVFALLSAFETY () (c:pv-fall-safety))
 (defun c:PVSAFETYLINE () (c:pv-fall-safety))
-(defun c:PVHANDRAIL () (c:pv-handrail))
+(defun c:PVHANDRAIL   () (c:pv-handrail))
+
+;;; ---------- GROUP 10: Parapet / Offsets (5 → 1) --------------------------
+(defun c:PVPARAPET (/ mode)
+  (initget "Draw Show Hide")
+  (setq mode (getkword "\nParapet [Draw/Show/Hide] <Draw>: "))
+  (cond
+    ((= mode "Show") (c:pv-show-all-offset))
+    ((= mode "Hide") (c:pv-hide-all-offset))
+    (t               (c:pv-draw-parapet-offsets))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVOFFSET        () (c:pv-draw-parapet-offsets))
+(defun c:PVPARAPETOFFSET () (c:pv-draw-parapet-offsets))
+(defun c:PVSHOWALLOFFSET () (c:pv-show-all-offset))
+(defun c:PVHIDEALLOFFSET () (c:pv-hide-all-offset))
+
+;;; ---------- GROUP 11: Reports & BOM (6 → 1) ------------------------------
+(defun c:PVREPORT (/ mode)
+  (initget "Energy BOM SLD Dim Validate")
+  (setq mode (getkword "\nReport [Energy/BOM/SLD/Dim/Validate] <Energy>: "))
+  (cond
+    ((= mode "BOM")      (c:pv-draw-bom))
+    ((= mode "SLD")      (c:pv-draw-sld))
+    ((= mode "Dim")      (c:pv-dim-plan))
+    ((= mode "Validate") (c:pv-validate))
+    (t                   (c:pv-report-energy))
+  )
+)
+;; Backward-compatible aliases
 (defun c:PVENERGYTABLE () (c:pv-energy-table))
-(defun c:PVSIMREPORT () (c:pv-report-energy))
-(defun c:PVREPORT () (c:pv-report-energy))
-(defun c:PVPICKOBSTACLES () (c:pv-pick-obstacles))
-(defun c:PVOBSTACLES () (c:pv-pick-obstacles))
-(defun c:PVCLEAROBSTACLES () (c:pv-clear-obstacles))
-(defun c:PVPICKBOUNDARY () (c:pv-pick-boundary))
-(defun c:PVDRAWBOM () (c:pv-draw-bom))
-(defun c:PVBOM () (c:pv-draw-bom))
-(defun c:PVLAYOUT () (c:pv-generate-layout))
-(defun c:PVCLEARLAYOUT () (c:pv-clear-layout))
+(defun c:PVSIMREPORT   () (c:pv-report-energy))
+(defun c:PVDRAWBOM     () (c:pv-draw-bom))
+(defun c:PVBOM         () (c:pv-draw-bom))
+(defun c:PVSLD         () (c:pv-draw-sld))
+(defun c:PVDRAWSLD     () (c:pv-draw-sld))
+(defun c:PVDIMPLAN     () (c:pv-dim-plan))
+(defun c:PVVALIDATE    () (c:pv-validate))
 
-;; PVcase / ARKA 360 Command Aliases
-(defun c:PVSTRING () (c:pv-stringing))
-(defun c:PVSTRINGING () (c:pv-stringing))
-(defun c:PVCLEARSTRINGS () (c:pv-clear-strings))
-(defun c:PVCLEARSTRING () (c:pv-clear-strings))
-(defun c:PVINVERTER () (c:pv-place-inverter))
-(defun c:PVPLACEINVERTER () (c:pv-place-inverter))
-(defun c:PVCABLETRAY () (c:pv-draw-cable-tray))
-(defun c:PVDRAWCABLETRAY () (c:pv-draw-cable-tray))
-(defun c:PVCLEARCABLETRAY () (c:pv-clear-cable-tray))
-(defun c:PVSLD () (c:pv-draw-sld))
-(defun c:PVDRAWSLD () (c:pv-draw-sld))
-(defun c:PV3D () (c:pv-3d-view))
-(defun c:PV3DVIEW () (c:pv-3d-view))
-(defun c:PVCLEAR3D () (c:pv-clear-3d))
-(defun c:PVPRUNESHADED () (c:pv-prune-shaded))
-(defun c:PVCHECKSHADING () (c:pv-prune-shaded))
-(defun c:PVPVSYST () (c:pv-export-pvsyst))
+;;; ---------- GROUP 12: Roof Management (5 → 1) ----------------------------
+(defun c:PVROOF (/ mode)
+  (initget "Multi List Number Select")
+  (setq mode (getkword "\nRoof [Multi/List/Number/Select] <Multi>: "))
+  (cond
+    ((= mode "List")   (c:pv-roof-list))
+    ((= mode "Number") (c:pv-roof-number))
+    ((= mode "Select") (c:pv-select-roof))
+    (t                 (c:pv-multiroof))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVMULTIROOF  () (c:pv-multiroof))
+(defun c:PVROOFS      () (c:pv-multiroof))
+(defun c:PVROOFLIST   () (c:pv-roof-list))
+(defun c:PVROOFNUM    () (c:pv-roof-number))
+(defun c:PVSELECTROOF () (c:pv-select-roof))
+
+;;; ---------- GROUP 13: Export (3 → 1) -------------------------------------
+(defun c:PVEXPORT (/ mode)
+  (initget "PVsyst CSV")
+  (setq mode (getkword "\nExport [PVsyst/CSV] <PVsyst>: "))
+  (cond
+    ((= mode "CSV")    (c:pv-dc-schedule))
+    (t                 (c:pv-export-pvsyst))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVPVSYST       () (c:pv-export-pvsyst))
 (defun c:PVEXPORTPVSYST () (c:pv-export-pvsyst))
-(defun c:PVSHADOWTOGGLE () (c:pv-toggle-shadow))
-(defun c:PVTOGGLESHADOW () (c:pv-toggle-shadow))
-(defun c:PVSHADOWMAP ()    (c:pv-toggle-shadow))
-(defun c:PVSHADOWON ()     (c:pv-shadow-on))
-(defun c:PVSHADOWOFF ()    (c:pv-shadow-off))
+(defun c:PVPVSYSTEXPORT () (c:pv-pvsyst-export))
+(defun c:PVDCSCHEDULE   () (c:pv-dc-schedule))
 
-;; PVDesigner 2027 - Advanced Command Suite Aliases
-(defun c:PVSTRINGMANUAL ()        (c:pv-string-manual))
-(defun c:PVPOLARITY ()            (c:pv-polarity))
-(defun c:PVSTRINGVIS ()           (c:pv-string-vis))
-(defun c:PVPANELNUM ()            (c:pv-panel-number))
-(defun c:PVLAYOUTEW ()            (c:pv-layout-ew))
-(defun c:PVSTRINGEW ()            (c:pv-string-ew))
-(defun c:PVEWVIS ()               (c:pv-ew-vis))
-(defun c:PVMPPTDETAILS ()         (c:pv-mppt-details))
-(defun c:PVMPPTLINK ()            (c:pv-mppt-link))
-(defun c:PVDCROUTETRACKED ()      (c:pv-dc-route-tracked))
-(defun c:PVDCSCHEDULE ()          (c:pv-dc-schedule))
-(defun c:PVDCROUTECOLORPOLARITY ()(c:pv-dc-route-color-polarity))
-(defun c:PVCABLECALC ()           (c:pv-cable-calc))
-(defun c:PVACEQUIPMENT ()         (c:pv-ac-equipment))
-(defun c:PVHIPSPLIT ()            (c:pv-hip-split))
-(defun c:PVDOMESPLIT ()           (c:pv-dome-split))
-(defun c:PVONEDOME ()             (c:pv-one-dome))
-(defun c:PVROOFNUM ()             (c:pv-roof-number))
-(defun c:PVSHOWALLOFFSET ()       (c:pv-show-all-offset))
-(defun c:PVHIDEALLOFFSET ()       (c:pv-hide-all-offset))
-(defun c:PVOFFSET ()              (c:pv-draw-parapet-offsets))
-(defun c:PVPARAPETOFFSET ()       (c:pv-draw-parapet-offsets))
-(defun c:PVPARAPET ()             (c:pv-draw-parapet-offsets))
-(defun c:PVDIMPLAN ()             (c:pv-dim-plan))
-(defun c:PVPVSYSTEXPORT ()        (c:pv-pvsyst-export))
-(defun c:PVVALIDATE ()            (c:pv-validate))
-(defun c:PVMULTIROOF ()           (c:pv-multiroof))
-(defun c:PVROOFS ()               (c:pv-multiroof))
-(defun c:PVROOFLIST ()            (c:pv-roof-list))
-(defun c:PVSELECTROOF ()          (c:pv-select-roof))
-(defun c:PVCOMPLIB ()             (c:pv-complib))
-(defun c:PVLIBRARY ()             (c:pv-complib))
-(defun c:PVBUILDING3D ()          (c:pv-building-3d))
-(defun c:PVBLDG3D ()              (c:pv-building-3d))
-(defun c:PVROOFTYPE ()            (c:pv-building-3d))
-(defun c:PVCLEARBLDG3D ()         (c:pv-clear-building-3d))
+;;; ---------- GROUP 14: Cable & DC Routing (7 → 1) -------------------------
+(defun c:PVCABLE (/ mode)
+  (initget "Tray Route Color Calc AC Clear")
+  (setq mode (getkword "\nCable [Tray/Route/Color/Calc/AC/Clear] <Tray>: "))
+  (cond
+    ((= mode "Route") (c:pv-dc-route-tracked))
+    ((= mode "Color") (c:pv-dc-route-color-polarity))
+    ((= mode "Calc")  (c:pv-cable-calc))
+    ((= mode "AC")    (c:pv-ac-equipment))
+    ((= mode "Clear") (c:pv-clear-cable-tray))
+    (t                (c:pv-draw-cable-tray))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVCABLETRAY            () (c:pv-draw-cable-tray))
+(defun c:PVDRAWCABLETRAY        () (c:pv-draw-cable-tray))
+(defun c:PVDCROUTETRACKED       () (c:pv-dc-route-tracked))
+(defun c:PVDCROUTECOLORPOLARITY () (c:pv-dc-route-color-polarity))
+(defun c:PVCABLECALC            () (c:pv-cable-calc))
+(defun c:PVACEQUIPMENT          () (c:pv-ac-equipment))
+
+;;; ---------- GROUP 15: Inverter (3 → 1) -----------------------------------
+(defun c:PVINVERTER (/ mode)
+  (initget "Place AC")
+  (setq mode (getkword "\nInverter [Place/AC] <Place>: "))
+  (if (= mode "AC") (c:pv-ac-equipment) (c:pv-place-inverter))
+)
+;; Backward-compatible aliases
+(defun c:PVPLACEINVERTER () (c:pv-place-inverter))
+
+;;; ---------- GROUP 16: Boundary & Obstacles (3 → 1) -----------------------
+(defun c:PVBOUNDARY (/ mode)
+  (initget "Boundary Obstacles Clear")
+  (setq mode (getkword "\nBoundary [Boundary/Obstacles/Clear] <Boundary>: "))
+  (cond
+    ((= mode "Obstacles") (c:pv-pick-obstacles))
+    ((= mode "Clear")     (c:pv-clear-obstacles))
+    (t                    (c:pv-pick-boundary))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVPICKBOUNDARY  () (c:pv-pick-boundary))
+(defun c:PVPICKOBSTACLES () (c:pv-pick-obstacles))
+(defun c:PVOBSTACLES     () (c:pv-pick-obstacles))
+
+;;; ---------- GROUP 17: Elevated Structure (4 → 1) -------------------------
+(defun c:PVELEV (/ mode)
+  (initget "Config Toggle")
+  (setq mode (getkword "\nElevated [Config/Toggle] <Config>: "))
+  (if (= mode "Toggle") (c:pv-elev-toggle) (c:pv-elev-legs-config))
+)
+;; Backward-compatible aliases
+(defun c:PVELEVCONFIG () (c:pv-elev-legs-config))
+(defun c:PVELEVATED   () (c:pv-elev-legs-config))
+(defun c:PVLEGS       () (c:pv-elev-legs-config))
+(defun c:PVELEVTOGGLE () (c:pv-elev-toggle))
+
+;;; ---------- GROUP 18: Roof Shape Splitting (3 → 1) -----------------------
+(defun c:PVROOFSPLIT (/ mode)
+  (initget "Hip Dome OneDome")
+  (setq mode (getkword "\nRoof split [Hip/Dome/OneDome] <Hip>: "))
+  (cond
+    ((= mode "Dome")    (c:pv-dome-split))
+    ((= mode "OneDome") (c:pv-one-dome))
+    (t                  (c:pv-hip-split))
+  )
+)
+;; Backward-compatible aliases
+(defun c:PVHIPSPLIT  () (c:pv-hip-split))
+(defun c:PVDOMESPLIT () (c:pv-dome-split))
+(defun c:PVONEDOME   () (c:pv-one-dome))
+
+;;; ---------- GROUP 19: Indian BOS & Earthing (IS 3043 / IS 62305) ----------
+(defun c:PVEARTHING  () (c:pv-earthing))
+(defun c:PVLIGHTNING () (c:pv-lightning))
+(defun c:PVAJB       () (c:pv-place-ajb))
+(defun c:PVACDB      () (c:pv-place-acdb))
 
 ;;; --------------------------------------------------------------------------
 ;;; Command: PVELEVCONFIG (Elevated Tilted Legs & Continuous Canopy Setup)
@@ -8420,10 +9279,7 @@
   (princ)
 )
 
-(defun c:PVELEVCONFIG ()         (c:pv-elev-legs-config))
-(defun c:PVELEVATED ()           (c:pv-elev-legs-config))
-(defun c:PVLEGS ()               (c:pv-elev-legs-config))
-(defun c:PVELEVTOGGLE ()         (c:pv-elev-toggle))
+;; Note: PVELEVCONFIG / PVELEVATED aliases defined in Group 17
 
 (princ "\n=======================================================")
 (princ "\n Solar PV Plant Layout Generator - Rooftop Projects Loaded!")

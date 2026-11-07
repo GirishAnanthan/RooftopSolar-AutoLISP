@@ -18,3 +18,16 @@ Desktop.ini
 __pycache__/
 *.py[cod]
 *$py.class
+
+# AI Agent folders
+.agents/
+.autohand/
+.kilo/
+.kiro/
+.minimax/
+skills-lock.json
+
+# Temporary analysis dumps
+*_keys.txt
+*_analysis.txt
+*_list.txt
