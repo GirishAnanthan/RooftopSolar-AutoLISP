@@ -21,320 +21,145 @@ dcl_settings : default_dcl_settings { audit_level = 0; }
 solar_pv_control_center : dialog {
   label = "Solar PV Rooftop - Master Functions Control Center (India EPC Edition) v3.0";
   initial_focus = "f_open_designer";
-  width = 96;
+  width = 114;
 
-  : text {
-    label = "SOLAR PV ROOFTOP DESIGNER - MASTER CONTROL CENTER & DISPATCHER";
-    alignment = centered;
-  }
-  : text {
-    label = "Indian Standards Edition (CEA Regulations 2023 | IS 3043 Earthing | IS 875 Wind | CEIG SLD)";
-    alignment = centered;
-  }
-  : spacer { height = 1; }
-  : boxed_column {
-    label = "1. Boundary, Roof Management & Parapet Offsets";
-    : row {
-      : button { key = "f_pick_bnd"; label = "Pick Roof Boundary / Roofs"; width = 26; }
-      : text { label = "PVBOUNDARY Boundary | Selects single or multiple closed roof outlines"; width = 56; }
-    }
-    : row {
-      : button { key = "f_pick_obs"; label = "Pick Obstacles & Arrays"; width = 26; }
-      : text { label = "PVBOUNDARY Obstacles | Unpacks arrays & generates solar shadows"; width = 56; }
-    }
-    : row {
-      : button { key = "f_multiroof"; label = "Multi-Roof Manager"; width = 26; }
-      : text { label = "PVROOF Multi | Configure multi-building / multi-zone roof sets"; width = 56; }
-    }
-    : row {
-      : button { key = "f_roof_list"; label = "Multi-Roof Inventory"; width = 26; }
-      : text { label = "PVROOF List | Displays all roofs with area (m2) and handle"; width = 56; }
-    }
-    : row {
-      : button { key = "f_select_roof"; label = "Select Active Roof"; width = 26; }
-      : text { label = "PVROOF Select | Choose specific active roof or select ALL roofs"; width = 56; }
-    }
-    : row {
-      : button { key = "f_roof_num"; label = "Label Roof ID Numbers"; width = 26; }
-      : text { label = "PVROOF Number | Adds RF-01, RF-02 identifiers to each roof boundary"; width = 56; }
-    }
-    : row {
-      : button { key = "f_show_offsets"; label = "Draw Parapet Offsets"; width = 26; }
-      : text { label = "PVPARAPET Draw | Draw parapet wall safety setback offset guides"; width = 56; }
-    }
-    : row {
-      : button { key = "f_show_hide_offset"; label = "Show / Hide Parapet Offsets"; width = 26; }
-      : text { label = "PVPARAPET Show/Hide | Toggle visibility of parapet offset guides"; width = 56; }
-    }
-    : row {
-      : button { key = "f_hip_split"; label = "Hip / Valley Roof Split"; width = 26; }
-      : text { label = "PVROOFSPLIT Hip | Bisects hip/valley roof polygons into sub-polygons"; width = 56; }
-    }
-    : row {
-      : button { key = "f_dome_split"; label = "Curved Dome / Barrel Split"; width = 26; }
-      : text { label = "PVROOFSPLIT Dome | Divides curved vault into slope facet strips"; width = 56; }
-    }
-    : row {
-      : button { key = "f_one_dome"; label = "Convert to Single Pitch"; width = 26; }
-      : text { label = "PVROOFSPLIT OneDome | Converts selected roof plane into uniform single pitch"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "2. 3D Building & Solar Shadow Analysis";
-    : row {
-      : button { key = "f_roof_bldg_3d"; label = "Roof Type & 3D Building"; width = 26; }
-      : text { label = "PV3D Build | Configure roof slope (1/2/4 dir) & create 3D building"; width = 56; }
-    }
-    : row {
-      : button { key = "f_3d_view"; label = "3D Isometric View"; width = 26; }
-      : text { label = "PV3D View | 3DFACE tilted tables, MMS legs, 3D obstacles & SW Iso view"; width = 56; }
-    }
-    : row {
-      : button { key = "f_prune_shaded"; label = "Prune Over-Shaded Modules"; width = 26; }
-      : text { label = "PVSHADOW Prune | Highlight & auto-delete shaded modules to boost PR"; width = 56; }
-    }
-    : row {
-      : button { key = "f_toggle_shadow"; label = "Toggle Shadow Map (ON/OFF)"; width = 26; }
-      : text { label = "PVSHADOW Toggle | Toggles obstacle solar shadow maps ON / OFF"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "3. Equipment Data & File Parsers (.PAN / .OND)";
-    : row {
-      : button { key = "f_load_pan"; label = "Load PV Module (.PAN)..."; width = 26; }
-      : text { label = "PVLOAD Pan | Browse & parse PVsyst .PAN module specifications"; width = 56; }
-    }
-    : row {
-      : button { key = "f_load_ond"; label = "Load Inverter (.OND)..."; width = 26; }
-      : text { label = "PVLOAD Ond | Browse & parse PVsyst .OND string inverter data"; width = 56; }
-    }
-    : row {
-      : button { key = "f_complib"; label = "PVCompLib Component Library"; width = 26; }
-      : text { label = "PVLOAD Library | View persistent modules (ALMM/DCR) & inverters"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "4. Solar PV Layout Sizing & Generation";
-    : row {
-      : button { key = "f_gen_layout"; label = "Generate Array Layout"; width = 26; }
-      : text { label = "PVLAYOUTGEN Auto | Populate boundary or size to Target Capacity (kWp)"; width = 56; }
-    }
-    : row {
-      : button { key = "f_layout_ew"; label = "Generate East-West Layout"; width = 26; }
-      : text { label = "PVLAYOUTGEN EW | Dual-tilt A-frame / butterfly East-West layout"; width = 56; }
-    }
-    : row {
-      : button { key = "f_elev_legs"; label = "Elevated Tilted Legs Setup"; width = 26; }
-      : text { label = "PVELEV Config | Continuous canopy slope & vertical leg spacing"; width = 56; }
-    }
-    : row {
-      : button { key = "f_elev_toggle"; label = "Toggle Elevated / Standard MMS"; width = 26; }
-      : text { label = "PVELEV Toggle | Switch mounting between Elevated Legs and Standard MMS"; width = 56; }
-    }
-    : row {
-      : button { key = "f_ew_vis"; label = "Toggle East/West Visibility"; width = 26; }
-      : text { label = "PVMPPT EW | Filter East or West subarrays independently"; width = 56; }
-    }
-    : row {
-      : button { key = "f_dim_plan"; label = "Dimension Layout Plan"; width = 26; }
-      : text { label = "PVREPORT Dim | Automated pitch, setback & row spacing dimensions"; width = 56; }
-    }
-    : row {
-      : button { key = "f_validate"; label = "Pre-Flight Engineering Check"; width = 26; }
-      : text { label = "PVREPORT Validate | Audit Sanctioned Load, MPPT voltage & IS 3043 earthing"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "5. Maintenance Walkways & Fall Safety Systems";
-    : row {
-      : button { key = "f_walkway"; label = "Pick / Draw Walkway Path"; width = 26; }
-      : text { label = "PVWALKWAY Draw | Define dedicated walkway corridors between tables"; width = 56; }
-    }
-    : row {
-      : button { key = "f_walkway_auto"; label = "Toggle Auto Walkway"; width = 26; }
-      : text { label = "PVWALKWAY Auto | Enable / disable automatic walkway generation"; width = 56; }
-    }
-    : row {
-      : button { key = "f_fall_safety"; label = "Draw Fall Safety Lifeline"; width = 26; }
-      : text { label = "PVSAFETY FallSafety | End anchors, spring tensioners & 90 deg corner pulleys"; width = 56; }
-    }
-    : row {
-      : button { key = "f_handrail"; label = "Draw Safety Handrails"; width = 26; }
-      : text { label = "PVSAFETY Handrail | Perimeter dual-rail guardrail with stanchions (NBC 2016)"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "6. DC Stringing, Inverters & Electrical BOS (IS / CEA)";
-    : row {
-      : button { key = "f_stringing"; label = "Auto Snake Stringing"; width = 26; }
-      : text { label = "PVSTRING Auto | Boustrophedon snake stringing, color-coded circuits & tags"; width = 56; }
-    }
-    : row {
-      : button { key = "f_string_manual"; label = "Manual Click-to-Wire String"; width = 26; }
-      : text { label = "PVSTRING Manual | Interactively click modules in custom sequence"; width = 56; }
-    }
-    : row {
-      : button { key = "f_string_ew"; label = "East-West Series Stringing"; width = 26; }
-      : text { label = "PVSTRING EW | Separate series strings for East & West subarrays"; width = 56; }
-    }
-    : row {
-      : button { key = "f_polarity"; label = "Toggle Circuit Polarity (+/-)"; width = 26; }
-      : text { label = "PVSTRING Polarity | Invert (+) and (-) DC string terminal poles"; width = 56; }
-    }
-    : row {
-      : button { key = "f_string_vis"; label = "String Group Visualizer"; width = 26; }
-      : text { label = "PVSTRING Vis | Highlight modules by string group with convex hull tint"; width = 56; }
-    }
-    : row {
-      : button { key = "f_panel_num"; label = "Panel Index Numbering"; width = 26; }
-      : text { label = "PVSTRING panelNum | Label modules: STR-01-01, STR-01-02..."; width = 56; }
-    }
-    : row {
-      : button { key = "f_mppt_details"; label = "Inverter MPPT Matrix"; width = 26; }
-      : text { label = "PVMPPT Details | MPPT tracker voltage & input allocation table"; width = 56; }
-    }
-    : row {
-      : button { key = "f_mppt_link"; label = "Link String to Inverter/MPPT"; width = 26; }
-      : text { label = "PVMPPT Link | Electrically connect string home run to inverter input"; width = 56; }
-    }
-    : row {
-      : button { key = "f_inverter"; label = "Place Inverter Plinth"; width = 26; }
-      : text { label = "PVINVERTER Place | Plinth pad, enclosure, DC/AC switches & ratings label"; width = 56; }
-    }
-    : row {
-      : button { key = "f_ajb"; label = "Place Array Junction Box (AJB)"; width = 26; }
-      : text { label = "PVAJB | Insert IP65 AJB/DCDB with 1000V DC fuses & Type-II SPD"; width = 56; }
-    }
-    : row {
-      : button { key = "f_ac_equipment"; label = "Place ACDB & DISCOM Switch"; width = 26; }
-      : text { label = "PVACDB | ACDB (4P MCCB, SPD) & Lockable DISCOM GOS Isolator"; width = 56; }
-    }
-    : row {
-      : button { key = "f_earthing"; label = "IS 3043 Chemical Earthing"; width = 26; }
-      : text { label = "PVEARTHING | Place AC, DC, LA earth pits (3m sep) & 25x3mm strip"; width = 56; }
-    }
-    : row {
-      : button { key = "f_lightning"; label = "IS/IEC 62305 Lightning Arrester"; width = 26; }
-      : text { label = "PVLIGHTNING | ESE / Franklin mast & rolling sphere protection cone"; width = 56; }
-    }
-    : row {
-      : button { key = "f_cable_tray"; label = "Draw Cable Tray Corridor"; width = 26; }
-      : text { label = "PVCABLE Tray | Perforated HDG tray with cover, %Vdrop calculation"; width = 56; }
-    }
-    : row {
-      : button { key = "f_dc_route_tracked"; label = "Tracked DC Cable Routing"; width = 26; }
-      : text { label = "PVCABLE Route | Draw DC runs snapped to tray/conduit routes"; width = 56; }
-    }
-    : row {
-      : button { key = "f_dc_route_color"; label = "Color DC Route by Polarity"; width = 26; }
-      : text { label = "PVCABLE Color | Dual Red (+) & Black (-) polarity conduit coloring"; width = 56; }
-    }
-    : row {
-      : button { key = "f_cable_calc"; label = "DC/AC Cable Voltage Drop"; width = 26; }
-      : text { label = "PVCABLE Calc | IS 17293 DC & IS 7098 AC Armored %Vdrop and mm2 sizing"; width = 56; }
-    }
-    : row {
-      : button { key = "f_dc_schedule"; label = "Insert DC Cable Schedule"; width = 26; }
-      : text { label = "PVEXPORT CSV | AutoCAD table: string tag, mm2, length & %Vdrop"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "7. Single Line Diagram, Reports & Exports";
-    : row {
-      : button { key = "f_sld"; label = "CEIG Single Line Diagram (SLD)"; width = 26; }
-      : text { label = "PVREPORT SLD | CEIG & DISCOM SLD with Dual Meters, GOS & IS 3043 Earthing"; width = 56; }
-    }
-    : row {
-      : button { key = "f_energy_table"; label = "Insert 25-Yr Energy Table"; width = 26; }
-      : text { label = "PVREPORT Energy | AutoCAD native Monthly, Yearly & 25-Yr Energy Table"; width = 56; }
-    }
-    : row {
-      : button { key = "f_bom_table"; label = "Insert Bill of Materials (BOM)"; width = 26; }
-      : text { label = "PVREPORT BOM | Indian Market BOQ (ALMM, Earth Pits, LA, ACDB/DCDB, HDG)"; width = 56; }
-    }
-    : row {
-      : button { key = "f_sim_report"; label = "View Simulation Report"; width = 26; }
-      : text { label = "PVREPORT Energy | Open comprehensive IEC 61724 report in Notepad"; width = 56; }
-    }
-    : row {
-      : button { key = "f_export_pvsyst"; label = "Export PVsyst 3D Array CSV"; width = 26; }
-      : text { label = "PVEXPORT PVsyst | 3D array coordinate CSV export for PVsyst 7/8"; width = 56; }
-    }
-    : row {
-      : button { key = "f_pvsyst_export"; label = "Export Native PVsyst .PVC"; width = 26; }
-      : text { label = "PVEXPORT PVsyst | Export native PVsyst 3D shading scene (.PVC)"; width = 56; }
-    }
-    : row {
-      : button { key = "f_export_csv"; label = "Export Project CSV Data"; width = 26; }
-      : text { label = "PVEXPORT CSV | Export generation & degradation schedule to CSV"; width = 56; }
-    }
-  }
-  : boxed_column {
-    label = "8. Clear / Reset Drawing Elements (Unified Master Reset)";
-    : row {
-      : button { key = "f_clr_all"; label = "Clear Everything"; width = 26; }
-      : text { label = "PVCLEAR All | Clear layout, strings, walkways, handrails, cable tray, 3D, obstacles"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_layout"; label = "Clear Active Layout"; width = 26; }
-      : text { label = "PVCLEAR Layout | Clear all generated modules and array polyline"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_strings"; label = "Clear DC Strings"; width = 26; }
-      : text { label = "PVCLEAR Strings | Purge active DC circuit polylines and markers"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_walkway"; label = "Clear Walkway Corridors"; width = 26; }
-      : text { label = "PVCLEAR Walkway | Removes user walkway corridors and restores space"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_handrail"; label = "Clear Handrails"; width = 26; }
-      : text { label = "PVCLEAR Handrail | Remove all handrail entities from drawing"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_cabletray"; label = "Clear Cable Tray"; width = 26; }
-      : text { label = "PVCLEAR CableTray | Remove all cable tray entities from drawing"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_earthing"; label = "Clear Earthing & Lightning"; width = 26; }
-      : text { label = "PVEARTHING Clear | Remove all earth pits, strips & lightning mast"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_3d"; label = "Clear 3D Visualization"; width = 26; }
-      : text { label = "PVCLEAR 3d | Remove 3D module faces, MMS legs & ISO view entities"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_bldg"; label = "Clear 3D Building"; width = 26; }
-      : text { label = "PVCLEAR Building | Remove 3D building walls, roof faces & parapet"; width = 56; }
-    }
-    : row {
-      : button { key = "f_clr_obs"; label = "Clear Obstacles / Shadows"; width = 26; }
-      : text { label = "PVCLEAR Obstacles | Purges active obstacles & shadow envelopes"; width = 56; }
-    }
-  }
-  : spacer { height = 1; }
-  : boxed_row {
-    label = "Full Configuration Suite";
+  : row {
     : button {
       key = "f_open_designer";
-      label = "Open Multi-Tabbed Designer...";
-      width = 28;
+      label = "★  OPEN FULL MULTI-TABBED PV DESIGNER (ROOFTOPSOLAR)  ★";
+      width = 72;
       is_default = true;
     }
-    : text {
-      label = "Command: PVSOLAR | Interactive 6-Tab Designer for complete configuration";
-      width = 54;
+    : ok_button {
+      label = "Close";
+      key = "cancel";
+      width = 16;
+      is_cancel = true;
     }
   }
 
-  : spacer { height = 1; }
+  : spacer { height = 0.5; }
+
   : row {
-    : spacer { width = 1; }
-    : cancel_button {
-      key = "cancel";
-      label = "Close";
-      is_cancel = true;
+    ;; COLUMN 1: SITE, ROOF & 3D BUILDING
+    : column {
+      width = 28;
+      : boxed_column {
+        label = "1. Roof & Boundaries";
+        : button { key = "f_pick_bnd"; label = "Pick Roof Boundary"; width = 25; }
+        : button { key = "f_pick_obs"; label = "Pick Obstacles/Arrays"; width = 25; }
+        : button { key = "f_multiroof"; label = "Multi-Roof Manager"; width = 25; }
+        : button { key = "f_roof_list"; label = "Roof Inventory List"; width = 25; }
+        : button { key = "f_select_roof"; label = "Select Active Roof"; width = 25; }
+        : button { key = "f_roof_num"; label = "Label Roof Numbers"; width = 25; }
+        : button { key = "f_show_offsets"; label = "Draw Parapet Offsets"; width = 25; }
+        : button { key = "f_show_hide_offset"; label = "Toggle Parapet Offsets"; width = 25; }
+        : button { key = "f_hip_split"; label = "Hip/Valley Roof Split"; width = 25; }
+        : button { key = "f_dome_split"; label = "Curved Dome Split"; width = 25; }
+        : button { key = "f_one_dome"; label = "Convert to Single Pitch"; width = 25; }
+      }
+      : boxed_column {
+        label = "2. 3D & Solar Shadows";
+        : button { key = "f_roof_bldg_3d"; label = "Roof Type & 3D Building"; width = 25; }
+        : button { key = "f_3d_view"; label = "3D Isometric View"; width = 25; }
+        : button { key = "f_toggle_shadow"; label = "Toggle Shadow Map"; width = 25; }
+        : button { key = "f_prune_shaded"; label = "Prune Shaded Panels"; width = 25; }
+      }
     }
+
+    ;; COLUMN 2: ARRAY LAYOUT, SAFETY & EQUIPMENT
+    : column {
+      width = 28;
+      : boxed_column {
+        label = "3. Array Layout Sizing";
+        : button { key = "f_gen_layout"; label = "Generate Array Layout"; width = 25; }
+        : button { key = "f_layout_ew"; label = "East-West Dual Pitch"; width = 25; }
+        : button { key = "f_elev_legs"; label = "Elevated Legs Setup"; width = 25; }
+        : button { key = "f_elev_toggle"; label = "Toggle Elevated MMS"; width = 25; }
+        : button { key = "f_ew_vis"; label = "Toggle E-W Visibility"; width = 25; }
+        : button { key = "f_dim_plan"; label = "Dimension Layout Plan"; width = 25; }
+        : button { key = "f_validate"; label = "Pre-Flight Check (CEA)"; width = 25; }
+      }
+      : boxed_column {
+        label = "4. Walkways & Safety (NBC)";
+        : button { key = "f_walkway"; label = "Pick / Draw Walkway"; width = 25; }
+        : button { key = "f_walkway_auto"; label = "Toggle Auto Walkway"; width = 25; }
+        : button { key = "f_handrail"; label = "Draw Safety Handrails"; width = 25; }
+        : button { key = "f_fall_safety"; label = "Fall Safety Lifeline"; width = 25; }
+      }
+      : boxed_column {
+        label = "5. Equipment Library";
+        : button { key = "f_load_pan"; label = "Load Module (.PAN)..."; width = 25; }
+        : button { key = "f_load_ond"; label = "Load Inverter (.OND)..."; width = 25; }
+        : button { key = "f_complib"; label = "Component Library"; width = 25; }
+      }
+    }
+
+    ;; COLUMN 3: ELECTRICAL BOS & DC STRINGING
+    : column {
+      width = 28;
+      : boxed_column {
+        label = "6. DC Stringing & MPPT";
+        : button { key = "f_stringing"; label = "Auto Snake Stringing"; width = 25; }
+        : button { key = "f_string_manual"; label = "Manual String Click"; width = 25; }
+        : button { key = "f_string_ew"; label = "East-West Stringing"; width = 25; }
+        : button { key = "f_polarity"; label = "Toggle Polarity (+/-)"; width = 25; }
+        : button { key = "f_string_vis"; label = "String Group Visualizer"; width = 25; }
+        : button { key = "f_panel_num"; label = "Panel Index Numbering"; width = 25; }
+        : button { key = "f_mppt_details"; label = "Inverter MPPT Matrix"; width = 25; }
+        : button { key = "f_mppt_link"; label = "Link Strings to MPPT"; width = 25; }
+      }
+      : boxed_column {
+        label = "7. Inverter & Cable BOS";
+        : button { key = "f_inverter"; label = "Place Inverter Plinth"; width = 25; }
+        : button { key = "f_ajb"; label = "Place AJB / DCDB (IP65)"; width = 25; }
+        : button { key = "f_ac_equipment"; label = "Place ACDB & GOS Switch"; width = 25; }
+        : button { key = "f_cable_tray"; label = "Draw Cable Tray"; width = 25; }
+        : button { key = "f_dc_route_tracked"; label = "Tracked DC Route"; width = 25; }
+        : button { key = "f_dc_route_color"; label = "Color DC Polarity"; width = 25; }
+        : button { key = "f_cable_calc"; label = "Cable V-Drop Sizing"; width = 25; }
+        : button { key = "f_dc_schedule"; label = "DC Cable Schedule"; width = 25; }
+      }
+    }
+
+    ;; COLUMN 4: EARTHING, SLD, REPORTS & CLEAR
+    : column {
+      width = 28;
+      : boxed_column {
+        label = "8. Earthing & LA (IS 3043)";
+        : button { key = "f_earthing"; label = "Chemical Earth Pits"; width = 25; }
+        : button { key = "f_lightning"; label = "Lightning Arrester"; width = 25; }
+        : button { key = "f_clr_earthing"; label = "Clear Earthing & LA"; width = 25; }
+      }
+      : boxed_column {
+        label = "9. SLD, Reports & Exports";
+        : button { key = "f_sld"; label = "CEIG Single Line (SLD)"; width = 25; }
+        : button { key = "f_energy_table"; label = "25-Yr Energy Table"; width = 25; }
+        : button { key = "f_bom_table"; label = "Bill of Materials (BOM)"; width = 25; }
+        : button { key = "f_sim_report"; label = "Simulation Report"; width = 25; }
+        : button { key = "f_export_pvsyst"; label = "Export PVsyst 3D CSV"; width = 25; }
+        : button { key = "f_pvsyst_export"; label = "Export Native .PVC"; width = 25; }
+        : button { key = "f_export_csv"; label = "Export Financial CSV"; width = 25; }
+      }
+      : boxed_column {
+        label = "10. Master Reset / Clear";
+        : button { key = "f_clr_all"; label = "★ CLEAR EVERYTHING ★"; width = 25; }
+        : button { key = "f_clr_layout"; label = "Clear PV Layout"; width = 25; }
+        : button { key = "f_clr_strings"; label = "Clear DC Strings"; width = 25; }
+        : button { key = "f_clr_walkway"; label = "Clear Walkways"; width = 25; }
+        : button { key = "f_clr_handrail"; label = "Clear Handrails"; width = 25; }
+        : button { key = "f_clr_cabletray"; label = "Clear Cable Tray"; width = 25; }
+        : button { key = "f_clr_3d"; label = "Clear 3D / Shadows"; width = 25; }
+        : button { key = "f_clr_bldg"; label = "Clear 3D Building"; width = 25; }
+        : button { key = "f_clr_obs"; label = "Clear Obstacles"; width = 25; }
+      }
+    }
+  }
+
+  : spacer { height = 0.5; }
+  : text {
+    label = "Indian Standards Edition (CEA Regulations 2023 | IS 3043:2018 Earthing | IS 875 Wind | CEIG SLD)";
+    alignment = centered;
   }
 }
 tab_site_roof : dialog {
