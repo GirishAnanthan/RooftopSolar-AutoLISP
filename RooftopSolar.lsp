@@ -63,6 +63,7 @@
       *PV_DRAW_SHADOW*        1
       *PV_BOUNDARY_ENT*       nil
       *PV_BOUNDARY_LIST*      nil     ; list of multiple roof boundary entity names
+      *PV_ROOF_SURFACES*      nil     ; list of sloped roof surface records: (surf-ent (:name . "") (:facing . "") (:azimuth . val) (:tilt . val) (:bldg-bbox . bbox) (:bldg-ent . ent))
       *PV_ACTIVE_ROOF_IDX*    0       ; 0 = All roofs, 1..N = specific active roof index
       *PV_OBSTACLES*          nil     ; list of (ent ht shadow-poly obs-poly)
       *PV_PRE_SEL*            nil
@@ -493,6 +494,45 @@
                (list (cadr (assoc 11 elist)) (caddr (assoc 11 elist)))
                (list (cadr (assoc 12 elist)) (caddr (assoc 12 elist)))
                (list (cadr (assoc 13 elist)) (caddr (assoc 13 elist)))))
+        (t nil)
+      )
+    )
+    nil
+  )
+)
+
+(defun pv:get-polyline-3d-pts (ent / elist etype pts sub-ent sub-data elev)
+  (if (and ent (setq elist (entget ent)))
+    (progn
+      (setq etype (cdr (assoc 0 elist)))
+      (cond
+        ((= etype "LWPOLYLINE")
+         (setq elev (cdr (assoc 38 elist)))
+         (if (null elev) (setq elev 0.0))
+         (setq pts nil)
+         (foreach item elist
+           (if (= (car item) 10)
+             (setq pts (cons (list (cadr item) (caddr item) elev) pts))
+           )
+         )
+         (reverse pts))
+        ((= etype "POLYLINE")
+         (setq pts nil
+               sub-ent (entnext ent))
+         (while (and sub-ent
+                     (setq sub-data (entget sub-ent))
+                     (/= (cdr (assoc 0 sub-data)) "SEQEND"))
+           (if (= (cdr (assoc 0 sub-data)) "VERTEX")
+             (setq pts (cons (cdr (assoc 10 sub-data)) pts))
+           )
+           (setq sub-ent (entnext sub-ent))
+         )
+         (reverse pts))
+        ((= etype "3DFACE")
+         (list (cdr (assoc 10 elist))
+               (cdr (assoc 11 elist))
+               (cdr (assoc 12 elist))
+               (cdr (assoc 13 elist))))
         (t nil)
       )
     )
@@ -933,7 +973,8 @@
   (entmake elist)
 )
 
-(defun pv:draw-3d-poly (pts layer color closed / z)
+(defun pv:draw-3d-poly (pts layer color closed / z e0 e-ret)
+  (setq e0 (entlast))
   (entmake
     (list
       '(0 . "POLYLINE")
@@ -964,6 +1005,32 @@
     )
   )
   (entmake '((0 . "SEQEND")))
+  (setq e-ret (if e0 (entnext e0) (entnext)))
+  e-ret
+)
+
+(defun pv:is-metal-roof-p ()
+  (or (= *PV_ROOF_TYPE* "Metal Sheet Rooftop")
+      (= *PV_ROOF_TYPE* "Sloped Metal Sheet")
+      (= *PV_ROOF_TYPE* "Sloped Metal Sheet Rooftop"))
+)
+
+(defun pv:register-roof-surface (pts name facing azimuth bldg-bbox b-ent / surf-ent)
+  (pv:init-layers)
+  (setq surf-ent (pv:draw-3d-poly pts "PV_BOUNDARY" 1 t))
+  (if surf-ent
+    (setq *PV_ROOF_SURFACES*
+      (cons (list surf-ent
+                  (cons :name name)
+                  (cons :facing facing)
+                  (cons :azimuth azimuth)
+                  (cons :tilt (if (> *PV_ROOF_SLOPE* 0.0) *PV_ROOF_SLOPE* 0.0))
+                  (cons :bldg-bbox bldg-bbox)
+                  (cons :bldg-ent b-ent)
+                  (cons :pts pts))
+            *PV_ROOF_SURFACES*))
+  )
+  surf-ent
 )
 
 (defun pv:draw-line (p1 p2 layer color / elist z1 z2)
@@ -4267,8 +4334,25 @@
   (/ (abs a) 2.0)
 )
 
-(defun c:pv-roof-number (/ ss i ent pts bbox xc yc r-id area-val z-rf)
+(defun c:pv-roof-number (/ ss i ent pts bbox xc yc r-id area-val z-rf ss-old ent-old s-info cur-bldg-bbox facing-tag)
   (pv:init-layers)
+  ;; Clear previous roof number annotation circles and texts on PV_ANNOTATION
+  (if (setq ss-old (ssget "X" '((8 . "PV_ANNOTATION"))))
+    (progn
+      (setq i 0)
+      (while (< i (sslength ss-old))
+        (setq ent-old (ssname ss-old i))
+        (if (or (= (cdr (assoc 0 (entget ent-old))) "CIRCLE")
+                (and (= (cdr (assoc 0 (entget ent-old))) "TEXT")
+                     (or (wcmatch (cdr (assoc 1 (entget ent-old))) "RF-*")
+                         (wcmatch (cdr (assoc 1 (entget ent-old))) "*m²*")
+                         (wcmatch (cdr (assoc 1 (entget ent-old))) "*Slope*"))))
+          (entdel ent-old)
+        )
+        (setq i (1+ i))
+      )
+    )
+  )
   (if (setq ss (ssget "X" '((0 . "LWPOLYLINE,POLYLINE,REGION") (8 . "PV_BOUNDARY"))))
     (progn
       (setq i 0)
@@ -4282,15 +4366,28 @@
             (setq yc (/ (+ (cadar bbox) (cadadr bbox)) 2.0))
             (setq r-id (strcat "RF-" (if (< (1+ i) 10) "0" "") (itoa (1+ i))))
             (setq area-val (pv:poly-area pts))
-            (setq z-rf (+ (pv:get-roof-z (list xc yc) bbox) 0.08))
+            (if (and (pv:is-metal-roof-p) (> *PV_ROOF_SLOPE* 0.0))
+              (setq area-val (/ area-val (max 0.20 (cos (dtr *PV_ROOF_SLOPE*)))))
+            )
+            (setq s-info (cdr (assoc ent *PV_ROOF_SURFACES*)))
+            (setq cur-bldg-bbox (if (and s-info (assoc :bldg-bbox s-info))
+                                  (cdr (assoc :bldg-bbox s-info))
+                                  (if *PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX* bbox)))
+            (setq z-rf (+ (pv:get-roof-z (list xc yc) cur-bldg-bbox) 0.15))
             (pv:draw-circle (list xc yc z-rf) 0.80 "PV_ANNOTATION" 4)
-            (pv:draw-text (list (- xc 0.40) (+ yc 0.10) z-rf) r-id 0.35 "PV_ANNOTATION" 7 0.0)
-            (pv:draw-text (list (- xc 0.55) (- yc 0.25) z-rf) (strcat (rtos area-val 2 0) " m²") 0.22 "PV_ANNOTATION" 2 0.0)
+            (pv:draw-text (list (- xc 0.40) (+ yc 0.15) z-rf) r-id 0.35 "PV_ANNOTATION" 7 0.0)
+            (pv:draw-text (list (- xc 0.55) (- yc 0.15) z-rf) (strcat (rtos area-val 2 0) " m²") 0.22 "PV_ANNOTATION" 2 0.0)
+            (if (and s-info (assoc :facing s-info))
+              (progn
+                (setq facing-tag (strcat (cdr (assoc :facing s-info)) " Slope (" (rtos *PV_ROOF_SLOPE* 2 1) "%%d)"))
+                (pv:draw-text (list (- xc 0.70) (- yc 0.40) z-rf) facing-tag 0.18 "PV_ANNOTATION" 3 0.0)
+              )
+            )
           )
         )
         (setq i (1+ i))
       )
-      (princ (strcat "\n[SolarPV] Numbered " (itoa (sslength ss)) " roof boundaries on layer 'PV_ANNOTATION'."))
+      (princ (strcat "\n[SolarPV] Numbered " (itoa (sslength ss)) " roof surface boundary(ies) on layer 'PV_ANNOTATION'."))
     )
     (princ "\n[SolarPV] No roof boundaries found on layer 'PV_BOUNDARY'.")
   )
@@ -4976,15 +5073,50 @@
 ;;; ==========================================================================
 ;; Note: pv:draw-3dface is defined at line 990 (duplicate removed)
 
-(defun c:pv-clear-building-3d (/ ss i)
+(defun c:pv-clear-building-3d (/ ss i ent s-rec orig-fp b-footprints)
+  ;; 1. Delete generated sloped surface boundaries from PV_BOUNDARY
+  (if *PV_ROOF_SURFACES*
+    (progn
+      (foreach s-rec *PV_ROOF_SURFACES*
+        (setq ent (car s-rec))
+        (if (and ent (entget ent))
+          (entdel ent)
+        )
+        ;; Collect original footprint entity
+        (setq orig-fp (cdr (assoc :bldg-ent (cdr s-rec))))
+        (if (and orig-fp (entget orig-fp))
+          (if (not (member orig-fp b-footprints))
+            (setq b-footprints (cons orig-fp b-footprints))
+          )
+        )
+      )
+      (setq *PV_ROOF_SURFACES* nil)
+    )
+  )
+  ;; 2. Clear all 3D building visual entities, restoring footprints back to PV_BOUNDARY
   (if (setq ss (ssget "X" '((8 . "PV_3D_BUILDING,PV_3D_ROOF_OUTLINE,PV_3D_ROOF_FACE,PV_3D_PARAPET"))))
     (progn
       (setq i 0)
       (while (< i (sslength ss))
-        (entdel (ssname ss i))
+        (setq ent (ssname ss i))
+        ;; If this entity is an original footprint, restore it to PV_BOUNDARY instead of deleting
+        (if (member ent b-footprints)
+          (progn
+            (vl-catch-all-apply 'vla-put-layer (list (vlax-ename->vla-object ent) "PV_BOUNDARY"))
+            (vl-catch-all-apply 'vla-put-color (list (vlax-ename->vla-object ent) 1))
+          )
+          (entdel ent)
+        )
         (setq i (1+ i))
       )
-      (princ (strcat "\n[SolarPV] Cleared " (itoa (sslength ss)) " 3D building entities."))
+      (if b-footprints
+        (progn
+          (setq *PV_BOUNDARY_LIST* (reverse b-footprints))
+          (setq *PV_BOUNDARY_ENT* (car *PV_BOUNDARY_LIST*))
+          (c:pv-roof-number)
+        )
+      )
+      (princ (strcat "\n[SolarPV] Cleared 3D building entities. Restored ground footprint(s) on PV_BOUNDARY."))
     )
   )
   (princ)
@@ -5010,7 +5142,9 @@
 
 (defun pv:build-single-3d-building (b-ent / pts bbox x1 y1 x2 y2 xc yc span-x span-y
                                             n i p-curr p-next z-curr z-next h-ridge h-eaves
-                                            h-parapet t-parapet z-base z-top pts-in p-a p-b q-a q-b wall-pts sh-poly)
+                                            h-parapet t-parapet z-base z-top pts-in p-a p-b q-a q-b wall-pts sh-poly
+                                            created-surfaces slab-pts s-ent s-pts-s s-ent-s s-pts-n s-ent-n
+                                            s-pts-w s-ent-w s-pts-e s-ent-e s-pts s-dir s-az)
   (setq pts (pv:get-polyline-pts b-ent))
   (if (and pts (>= (length pts) 3))
     (progn
@@ -5023,6 +5157,8 @@
             h-eaves (if (> *PV_BLDG_EAVES_HT* 0.0) *PV_BLDG_EAVES_HT* 6.0))
       
       (setq n (length pts) i 0)
+      (setq created-surfaces nil)
+
       ;; 1. Draw 3D perimeter ground lines, corner columns, eaves lines, and vertical wall 3DFACEs
       (while (< i n)
         (setq p-curr (nth i pts)
@@ -5051,21 +5187,23 @@
         (setq i (1+ i))
       )
 
-      ;; 2. Draw Roof Structure Features (Ridge, Gables, Roof Sheets & Parapet Walls)
+      ;; 2. Draw Roof Structure Features & Create Designated Sloped Roof Surfaces on PV_BOUNDARY
       (cond
         ;; Flat RCC
         ((or (= *PV_ROOF_TYPE* "Flat RCC Rooftop") (= *PV_ROOF_SLOPE_DIRS* 0))
-         ;; 1. Draw Roof Slab Surface (Surface on which module mounting structures are installed)
-         (if (= n 4)
-           (pv:draw-3dface (list (car (nth 0 pts)) (cadr (nth 0 pts)) h-eaves)
-                           (list (car (nth 1 pts)) (cadr (nth 1 pts)) h-eaves)
-                           (list (car (nth 2 pts)) (cadr (nth 2 pts)) h-eaves)
-                           (list (car (nth 3 pts)) (cadr (nth 3 pts)) h-eaves)
-                           "PV_3D_ROOF_FACE" 252)
-           (pv:draw-3dface (list x1 y1 h-eaves) (list x2 y1 h-eaves)
-                           (list x2 y2 h-eaves) (list x1 y2 h-eaves)
-                           "PV_3D_ROOF_FACE" 252)
-         )
+         ;; 1. Draw Roof Slab Surface 3DFACE
+         (setq slab-pts
+           (if (= n 4)
+             (list (list (car (nth 0 pts)) (cadr (nth 0 pts)) h-eaves)
+                   (list (car (nth 1 pts)) (cadr (nth 1 pts)) h-eaves)
+                   (list (car (nth 2 pts)) (cadr (nth 2 pts)) h-eaves)
+                   (list (car (nth 3 pts)) (cadr (nth 3 pts)) h-eaves))
+             (list (list x1 y1 h-eaves) (list x2 y1 h-eaves)
+                   (list x2 y2 h-eaves) (list x1 y2 h-eaves))))
+         (pv:draw-3dface (nth 0 slab-pts) (nth 1 slab-pts) (nth 2 slab-pts) (nth 3 slab-pts) "PV_3D_ROOF_FACE" 252)
+         (setq s-ent (pv:register-roof-surface slab-pts "Flat RCC Roof Slab" "Flat" *PV_AZIMUTH* bbox b-ent))
+         (setq created-surfaces (list s-ent))
+
          ;; 2. Draw Parapet Wall on the roof surface (rising from h-eaves to h-eaves + h-parapet)
          (if (and *PV_PARAPET_HEIGHT* (> *PV_PARAPET_HEIGHT* 0.0))
            (progn
@@ -5156,6 +5294,16 @@
              (pv:draw-3dface (list x1 yc h-ridge) (list x2 yc h-ridge)
                              (list x2 y2 h-eaves) (list x1 y2 h-eaves)
                              "PV_3D_ROOF_FACE" 252)
+             
+             ;; Designate South Sloped Surface as PV Installation Boundary on PV_BOUNDARY
+             (setq s-pts-s (list (list x1 y1 h-eaves) (list x2 y1 h-eaves) (list x2 yc h-ridge) (list x1 yc h-ridge)))
+             (setq s-ent-s (pv:register-roof-surface s-pts-s "South-Facing Sloped Roof Surface" "South" 180.0 bbox b-ent))
+             
+             ;; Designate North Sloped Surface as PV Installation Boundary on PV_BOUNDARY
+             (setq s-pts-n (list (list x1 yc h-ridge) (list x2 yc h-ridge) (list x2 y2 h-eaves) (list x1 y2 h-eaves)))
+             (setq s-ent-n (pv:register-roof-surface s-pts-n "North-Facing Sloped Roof Surface" "North" 0.0 bbox b-ent))
+             
+             (setq created-surfaces (list s-ent-s s-ent-n))
            )
            (progn ; East & West facing (Ridge along X=xc from Y1 to Y2)
              ;; 3D Ridge line
@@ -5176,6 +5324,16 @@
              (pv:draw-3dface (list xc y1 h-ridge) (list x2 y1 h-eaves)
                              (list x2 y2 h-eaves) (list xc y2 h-ridge)
                              "PV_3D_ROOF_FACE" 252)
+             
+             ;; Designate West Sloped Surface as PV Installation Boundary on PV_BOUNDARY
+             (setq s-pts-w (list (list x1 y1 h-eaves) (list xc y1 h-ridge) (list xc y2 h-ridge) (list x1 y2 h-eaves)))
+             (setq s-ent-w (pv:register-roof-surface s-pts-w "West-Facing Sloped Roof Surface" "West" 270.0 bbox b-ent))
+             
+             ;; Designate East Sloped Surface as PV Installation Boundary on PV_BOUNDARY
+             (setq s-pts-e (list (list xc y1 h-ridge) (list x2 y1 h-eaves) (list x2 y2 h-eaves) (list xc y2 h-ridge)))
+             (setq s-ent-e (pv:register-roof-surface s-pts-e "East-Facing Sloped Roof Surface" "East" 90.0 bbox b-ent))
+             
+             (setq created-surfaces (list s-ent-w s-ent-e))
            )
          ))
 
@@ -5183,22 +5341,22 @@
         ((= *PV_ROOF_SLOPE_DIRS* 1)
          (cond
            ((or (= *PV_ROOF_FACING* "South") (= *PV_ROOF_FACING* "S"))
-            (pv:draw-3dface (list x1 y1 h-eaves) (list x2 y1 h-eaves)
-                            (list x2 y2 h-ridge) (list x1 y2 h-ridge)
-                            "PV_3D_ROOF_FACE" 252))
+            (setq s-pts (list (list x1 y1 h-eaves) (list x2 y1 h-eaves) (list x2 y2 h-ridge) (list x1 y2 h-ridge))
+                  s-dir "South" s-az 180.0))
            ((or (= *PV_ROOF_FACING* "North") (= *PV_ROOF_FACING* "N"))
-            (pv:draw-3dface (list x1 y1 h-ridge) (list x2 y1 h-ridge)
-                            (list x2 y2 h-eaves) (list x1 y2 h-eaves)
-                            "PV_3D_ROOF_FACE" 252))
+            (setq s-pts (list (list x1 y1 h-ridge) (list x2 y1 h-ridge) (list x2 y2 h-eaves) (list x1 y2 h-eaves))
+                  s-dir "North" s-az 0.0))
            ((or (= *PV_ROOF_FACING* "West") (= *PV_ROOF_FACING* "W"))
-            (pv:draw-3dface (list x1 y1 h-eaves) (list x2 y1 h-ridge)
-                            (list x2 y2 h-ridge) (list x1 y2 h-eaves)
-                            "PV_3D_ROOF_FACE" 252))
+            (setq s-pts (list (list x1 y1 h-eaves) (list x2 y1 h-ridge) (list x2 y2 h-ridge) (list x1 y2 h-eaves))
+                  s-dir "West" s-az 270.0))
            (t ; East
-            (pv:draw-3dface (list x1 y1 h-ridge) (list x2 y1 h-eaves)
-                            (list x2 y2 h-eaves) (list x1 y2 h-ridge)
-                            "PV_3D_ROOF_FACE" 252))
-         ))
+            (setq s-pts (list (list x1 y1 h-ridge) (list x2 y1 h-eaves) (list x2 y2 h-eaves) (list x1 y2 h-ridge))
+                  s-dir "East" s-az 90.0))
+         )
+         (pv:draw-3dface (nth 0 s-pts) (nth 1 s-pts) (nth 2 s-pts) (nth 3 s-pts) "PV_3D_ROOF_FACE" 252)
+         (setq s-ent (pv:register-roof-surface s-pts (strcat s-dir "-Facing Monoslope Roof Surface") s-dir s-az bbox b-ent))
+         (setq created-surfaces (list s-ent))
+        )
 
         ;; 4 Directions (Hip Roof)
         ((= *PV_ROOF_SLOPE_DIRS* 4)
@@ -5207,7 +5365,7 @@
          (pv:draw-line-3d (list xc yc h-ridge) (list x2 y1 h-eaves) "PV_3D_ROOF_OUTLINE" 3)
          (pv:draw-line-3d (list xc yc h-ridge) (list x2 y2 h-eaves) "PV_3D_ROOF_OUTLINE" 3)
          (pv:draw-line-3d (list xc yc h-ridge) (list x1 y2 h-eaves) "PV_3D_ROOF_OUTLINE" 3)
-         ;; 4 Roof Facets
+         ;; 4 Roof Facet 3DFACEs
          (pv:draw-3dface (list x1 y1 h-eaves) (list x2 y1 h-eaves)
                          (list xc yc h-ridge) (list xc yc h-ridge)
                          "PV_3D_ROOF_FACE" 252)
@@ -5220,15 +5378,33 @@
          (pv:draw-3dface (list x1 y2 h-eaves) (list x1 y1 h-eaves)
                          (list xc yc h-ridge) (list xc yc h-ridge)
                          "PV_3D_ROOF_FACE" 252)
+         ;; 4 Sloped Surface Boundaries on PV_BOUNDARY
+         (setq s-pts-s (list (list x1 y1 h-eaves) (list x2 y1 h-eaves) (list xc yc h-ridge)))
+         (setq s-ent-s (pv:register-roof-surface s-pts-s "South-Facing Hip Roof Facet" "South" 180.0 bbox b-ent))
+         (setq s-pts-e (list (list x2 y1 h-eaves) (list x2 y2 h-eaves) (list xc yc h-ridge)))
+         (setq s-ent-e (pv:register-roof-surface s-pts-e "East-Facing Hip Roof Facet" "East" 90.0 bbox b-ent))
+         (setq s-pts-n (list (list x2 y2 h-eaves) (list x1 y2 h-eaves) (list xc yc h-ridge)))
+         (setq s-ent-n (pv:register-roof-surface s-pts-n "North-Facing Hip Roof Facet" "North" 0.0 bbox b-ent))
+         (setq s-pts-w (list (list x1 y2 h-eaves) (list x1 y1 h-eaves) (list xc yc h-ridge)))
+         (setq s-ent-w (pv:register-roof-surface s-pts-w "West-Facing Hip Roof Facet" "West" 270.0 bbox b-ent))
+         (setq created-surfaces (list s-ent-s s-ent-e s-ent-n s-ent-w))
         )
       )
-      t
+
+      ;; Move the original ground polyline off PV_BOUNDARY to PV_3D_BUILDING (color 8)
+      (if (and b-ent (entget b-ent))
+        (progn
+          (vl-catch-all-apply 'vla-put-layer (list (vlax-ename->vla-object b-ent) "PV_3D_BUILDING"))
+          (vl-catch-all-apply 'vla-put-color (list (vlax-ename->vla-object b-ent) 8))
+        )
+      )
+      created-surfaces
     )
     nil
   )
 )
 
-(defun pv:build-all-3d-buildings (/ count b-list ss i)
+(defun pv:build-all-3d-buildings (/ count b-list ss i new-b-list surfs ent)
   (pv:init-layers)
   (c:pv-clear-building-3d)
   (setq b-list (if (and (boundp '*PV_BOUNDARY_LIST*) *PV_BOUNDARY_LIST*)
@@ -5251,11 +5427,31 @@
       )
     )
   )
-  (setq count 0)
+  (setq count 0
+        new-b-list nil
+        *PV_ROOF_SURFACES* nil)
   (if b-list
     (foreach ent b-list
-      (if (pv:build-single-3d-building ent)
-        (setq count (1+ count))
+      (setq surfs (pv:build-single-3d-building ent))
+      (if surfs
+        (progn
+          (setq count (1+ count))
+          (setq new-b-list (append new-b-list surfs))
+        )
+      )
+    )
+  )
+  (if new-b-list
+    (progn
+      (setq *PV_BOUNDARY_LIST* new-b-list)
+      (setq *PV_BOUNDARY_ENT* (car *PV_BOUNDARY_LIST*))
+      (setq *PV_ACTIVE_ROOF_IDX* 0)
+      (c:pv-roof-number)
+      (if (pv:is-metal-roof-p)
+        (progn
+          (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
+          (setq *PV_TILT* (if (> *PV_ROOF_SLOPE* 0.0) *PV_ROOF_SLOPE* 10.0))
+        )
       )
     )
   )
@@ -5307,7 +5503,7 @@
                      (rtos *PV_PARAPET_THICKNESS* 2 2) " m T)."))
     )
     (progn
-      (setq *PV_ROOF_TYPE* "Sloped Metal Sheet")
+      (setq *PV_ROOF_TYPE* "Metal Sheet Rooftop")
       ;; Prompt for 1, 2, or 4 directions
       (initget "1 2 4 One Two Four")
       (setq s-dirs (getkword "\nIs the Metal Sheet Roof sloped in [1 / 2 / 4] directions? <2>: "))
@@ -5400,14 +5596,17 @@
       (setq slope-rad (atan dz (max 1.0 span)))
       (setq slope-deg (* slope-rad (/ 180.0 pi)))
       (setq *PV_ROOF_SLOPE* (atof (rtos slope-deg 2 1)))
+      (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
+      (setq *PV_TILT* *PV_ROOF_SLOPE*)
       (princ (strcat "\n[SolarPV] Calculated Roof Slope: " (rtos *PV_ROOF_SLOPE* 2 1) " deg (" (rtos (* (/ dz (max 1.0 span)) 100.0) 2 1) "% pitch)."))
     )
   )
 
-  ;; 3. Build 3D Building Outlines
+  ;; 3. Build 3D Building Outlines & Designate Sloped Surfaces as PV Installation Boundaries
   (setq count (pv:build-all-3d-buildings))
-  (princ (strcat "\n[SolarPV] Created 3D Building Outlines for " (itoa count) " rooftop boundary/roof(s)."))
-  (princ "\n Layers created: PV_3D_BUILDING (Walls), PV_3D_ROOF_OUTLINE (Eaves & Ridge), PV_3D_ROOF_FACE (Roof Planes).")
+  (princ (strcat "\n[SolarPV] Created 3D Building Outlines for " (itoa count) " building(s)."))
+  (princ (strcat "\n[SolarPV] Designated " (itoa (length *PV_BOUNDARY_LIST*)) " sloped roof surface(s) as active PV installation boundaries on layer 'PV_BOUNDARY'."))
+  (princ "\n Layers created: PV_3D_BUILDING (Walls & Footprint), PV_3D_ROOF_OUTLINE (Eaves & Ridge), PV_3D_ROOF_FACE (Roof Sheets).")
 
   ;; 4. Prompt to inspect in 3D view
   (initget "Yes No Y N")
@@ -6301,7 +6500,7 @@
   (setq tbl-l (+ (* tbl-rows cur-mod-l) (* (1- tbl-rows) row-gap)))
 
   (cond
-    ((and (= *PV_ROOF_TYPE* "Metal Sheet Rooftop") (= *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)"))
+    ((and (pv:is-metal-roof-p) (= *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)"))
       (setq tbl-pitch (+ tbl-l 0.15)))
     ((wcmatch (strcase *PV_MOUNT_OPT*) "*ELEVATED*")
       (setq tbl-pitch (if (> *PV_PITCH* (+ tbl-l 0.10)) *PV_PITCH* (+ tbl-l (max 0.10 *PV_ROW_SPACING*)))))
@@ -6731,13 +6930,39 @@
         )
       )
       
+      ;; If multiple sloped surfaces detected (e.g. Dual-Pitch Gable), allow user to filter slopes before layout
+      (if (and (= *PV_ROOF_SLOPE_DIRS* 2) (>= (length b-list) 2) (<= *PV_ACTIVE_ROOF_IDX* 0) *PV_ROOF_SURFACES*)
+        (progn
+          (initget "Both South North Both-Slopes South-Slope-Only North-Slope-Only West East West-Slope-Only East-Slope-Only")
+          (setq slope-sel (getkword (strcat "\nDual-Pitch Sloped Roof detected (" (itoa (length b-list)) " surfaces).\nSelect Slope(s) to populate [Both-Slopes / South-Slope-Only / North-Slope-Only / West-Slope-Only / East-Slope-Only] <"
+                                            (if *PV_ROOF_SLOPE_POPULATE* *PV_ROOF_SLOPE_POPULATE* "Both-Slopes") ">: ")))
+          (if (or (null slope-sel) (= slope-sel ""))
+            (setq slope-sel (if *PV_ROOF_SLOPE_POPULATE* *PV_ROOF_SLOPE_POPULATE* "Both-Slopes"))
+          )
+          (setq *PV_ROOF_SLOPE_POPULATE* slope-sel)
+          (cond
+            ((or (= slope-sel "South") (= slope-sel "South-Slope-Only"))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "South")) b-list)))
+            ((or (= slope-sel "North") (= slope-sel "North-Slope-Only"))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "North")) b-list)))
+            ((or (= slope-sel "West") (= slope-sel "West-Slope-Only"))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "West")) b-list)))
+            ((or (= slope-sel "East") (= slope-sel "East-Slope-Only"))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "East")) b-list)))
+          )
+        )
+      )
+
       (setq r-idx 1)
       (foreach ent b-list
         (setq b-pts (pv:get-polyline-pts ent))
         (if (and b-pts (> (length b-pts) 2))
           (progn
+            (setq s-info (cdr (assoc ent *PV_ROOF_SURFACES*)))
             (setq bbox (pv:pts-bbox b-pts))
-            (setq *PV_CURRENT_BUILDING_BBOX* bbox)
+            (setq *PV_CURRENT_BUILDING_BBOX* (if (and s-info (assoc :bldg-bbox s-info))
+                                               (cdr (assoc :bldg-bbox s-info))
+                                               bbox))
             (setq x1 (caar bbox)    y1 (cadar bbox)
                   x2 (caadr bbox)   y2 (cadadr bbox)
                   xc (/ (+ x1 x2) 2.0) yc (/ (+ y1 y2) 2.0))
@@ -6746,8 +6971,23 @@
             
             (setq sub-zones nil)
             
-            ;; Check if 2-sided sloped metal roof
+            ;; Check if designated sloped roof surface or fallback to 2D footprint division
             (cond
+              ;; Case 1: Designated Sloped Roof Surface
+              (s-info
+               (setq z-name (cdr (assoc :name s-info)))
+               (if (null z-name) (setq z-name (strcat "Roof Surface RF-" (if (< r-idx 10) "0" "") (itoa r-idx))))
+               (if (assoc :azimuth s-info)
+                 (setq *PV_AZIMUTH* (cdr (assoc :azimuth s-info)))
+               )
+               (if (assoc :tilt s-info)
+                 (setq *PV_TILT* (cdr (assoc :tilt s-info)))
+               )
+               (if (pv:is-metal-roof-p)
+                 (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
+               )
+               (setq sub-zones (list (list b-pts z-name)))
+              )
               ;; 2 Directions: North & South Gable
               ((and (= *PV_ROOF_SLOPE_DIRS* 2)
                     (or (= *PV_ROOF_FACING* "North & South") (= *PV_ROOF_FACING* "North-South") (= *PV_ROOF_FACING* "NS")))
