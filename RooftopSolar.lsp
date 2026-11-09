@@ -63,7 +63,7 @@
       *PV_DRAW_SHADOW*        1
       *PV_BOUNDARY_ENT*       nil
       *PV_BOUNDARY_LIST*      nil     ; list of multiple roof boundary entity names
-      *PV_ROOF_SURFACES*      nil     ; list of sloped roof surface records: (surf-ent (:name . "") (:facing . "") (:azimuth . val) (:tilt . val) (:bldg-bbox . bbox) (:bldg-ent . ent))
+      *PV_ROOF_SURFACES*      nil     ; list of sloped roof surface records: (surf-ent ("NAME" . "") ("FACING" . "") ("AZIMUTH" . val) ("TILT" . val) ("BLDG-BBOX" . bbox) ("BLDG-ENT" . ent) ("PTS" . pts))
       *PV_ACTIVE_ROOF_IDX*    0       ; 0 = All roofs, 1..N = specific active roof index
       *PV_OBSTACLES*          nil     ; list of (ent ht shadow-poly obs-poly)
       *PV_PRE_SEL*            nil
@@ -632,13 +632,17 @@
 ;;; Retrieves current active roof bounding box for 3D elevation calculations
 (defun pv:get-roof-bbox (/ all-pts)
   (cond
-    (*PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX*)
-    (*PV_BOUNDARY_ENT* (pv:pts-bbox (pv:get-polyline-pts *PV_BOUNDARY_ENT*)))
+    ((and *PV_CURRENT_BUILDING_BBOX*
+          (listp *PV_CURRENT_BUILDING_BBOX*)
+          (listp (car *PV_CURRENT_BUILDING_BBOX*)))
+     *PV_CURRENT_BUILDING_BBOX*)
+    ((and *PV_BOUNDARY_ENT* (pv:get-polyline-pts *PV_BOUNDARY_ENT*))
+     (pv:pts-bbox (pv:get-polyline-pts *PV_BOUNDARY_ENT*)))
     (*PV_BOUNDARY_LIST*
      (foreach b-ent *PV_BOUNDARY_LIST*
        (setq all-pts (append all-pts (pv:get-polyline-pts b-ent))))
-     (if all-pts (pv:pts-bbox all-pts) nil))
-    (t nil)
+     (if (and all-pts (> (length all-pts) 1)) (pv:pts-bbox all-pts) nil))
+    (t '((0.0 0.0) (100.0 100.0)))
   )
 )
 
@@ -646,8 +650,10 @@
 (defun pv:get-roof-z (pt bbox / x y x1 y1 x2 y2 xc yc span-x span-y h-ridge h-eaves dx dy d-norm)
   (setq x (car pt)
         y (cadr pt))
-  (if (not bbox) (setq bbox (pv:get-roof-bbox)))
-  (if bbox
+  (if (not (and (listp bbox) (listp (car bbox))))
+    (setq bbox (pv:get-roof-bbox))
+  )
+  (if (and (listp bbox) (listp (car bbox)))
     (setq x1 (caar bbox)
           y1 (cadar bbox)
           x2 (caadr bbox)
@@ -941,7 +947,8 @@
       (setq hull-pts (pv:convex-hull all-pts))
       (if (and hull-pts (= *PV_DRAW_SHADOW* 1))
         (progn
-          (setq r-bbox (if *PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX*
+          (setq r-bbox (if (and *PV_CURRENT_BUILDING_BBOX* (listp *PV_CURRENT_BUILDING_BBOX*) (listp (car *PV_CURRENT_BUILDING_BBOX*)))
+                         *PV_CURRENT_BUILDING_BBOX*
                          (if (and *PV_BOUNDARY_LIST* (car *PV_BOUNDARY_LIST*))
                            (pv:pts-bbox (pv:get-polyline-pts (car *PV_BOUNDARY_LIST*)))
                            (list (list 0.0 0.0) (list 100.0 100.0)))))
@@ -1021,13 +1028,13 @@
   (if surf-ent
     (setq *PV_ROOF_SURFACES*
       (cons (list surf-ent
-                  (cons :name name)
-                  (cons :facing facing)
-                  (cons :azimuth azimuth)
-                  (cons :tilt (if (> *PV_ROOF_SLOPE* 0.0) *PV_ROOF_SLOPE* 0.0))
-                  (cons :bldg-bbox bldg-bbox)
-                  (cons :bldg-ent b-ent)
-                  (cons :pts pts))
+                  (cons "NAME" name)
+                  (cons "FACING" facing)
+                  (cons "AZIMUTH" azimuth)
+                  (cons "TILT" (if (> *PV_ROOF_SLOPE* 0.0) *PV_ROOF_SLOPE* 0.0))
+                  (cons "BLDG-BBOX" bldg-bbox)
+                  (cons "BLDG-ENT" b-ent)
+                  (cons "PTS" pts))
             *PV_ROOF_SURFACES*))
   )
   surf-ent
@@ -1178,8 +1185,8 @@
                       (if (and *PV_MOD_CLEAR* (> *PV_MOD_CLEAR* 0.0)) *PV_MOD_CLEAR* 2.00)))
   (setq tilt-rad (dtr (if (> *PV_TILT* 0.0) *PV_TILT* 15.0)))
   (setq s (tan tilt-rad))
-  (if (null r-bbox) (setq r-bbox (if *PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX* (pv:get-roof-bbox))))
-  (if r-bbox
+  (if (null r-bbox) (setq r-bbox (if (and *PV_CURRENT_BUILDING_BBOX* (listp *PV_CURRENT_BUILDING_BBOX*) (listp (car *PV_CURRENT_BUILDING_BBOX*))) *PV_CURRENT_BUILDING_BBOX* (pv:get-roof-bbox))))
+  (if (and (listp r-bbox) (listp (car r-bbox)))
     (setq minx (caar r-bbox)
           miny (cadar r-bbox)
           maxx (caadr r-bbox)
@@ -4370,16 +4377,21 @@
               (setq area-val (/ area-val (max 0.20 (cos (dtr *PV_ROOF_SLOPE*)))))
             )
             (setq s-info (cdr (assoc ent *PV_ROOF_SURFACES*)))
-            (setq cur-bldg-bbox (if (and s-info (assoc :bldg-bbox s-info))
-                                  (cdr (assoc :bldg-bbox s-info))
-                                  (if *PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX* bbox)))
+            (setq cur-bldg-bbox (if (and s-info (assoc "BLDG-BBOX" s-info))
+                                  (cdr (assoc "BLDG-BBOX" s-info))
+                                  (if (and *PV_CURRENT_BUILDING_BBOX* (listp *PV_CURRENT_BUILDING_BBOX*) (listp (car *PV_CURRENT_BUILDING_BBOX*)))
+                                    *PV_CURRENT_BUILDING_BBOX*
+                                    bbox)))
+            (if (not (and (listp cur-bldg-bbox) (listp (car cur-bldg-bbox))))
+              (setq cur-bldg-bbox bbox)
+            )
             (setq z-rf (+ (pv:get-roof-z (list xc yc) cur-bldg-bbox) 0.15))
             (pv:draw-circle (list xc yc z-rf) 0.80 "PV_ANNOTATION" 4)
             (pv:draw-text (list (- xc 0.40) (+ yc 0.15) z-rf) r-id 0.35 "PV_ANNOTATION" 7 0.0)
             (pv:draw-text (list (- xc 0.55) (- yc 0.15) z-rf) (strcat (rtos area-val 2 0) " m²") 0.22 "PV_ANNOTATION" 2 0.0)
-            (if (and s-info (assoc :facing s-info))
+            (if (and s-info (assoc "FACING" s-info))
               (progn
-                (setq facing-tag (strcat (cdr (assoc :facing s-info)) " Slope (" (rtos *PV_ROOF_SLOPE* 2 1) "%%d)"))
+                (setq facing-tag (strcat (cdr (assoc "FACING" s-info)) " Slope (" (rtos *PV_ROOF_SLOPE* 2 1) "%%d)"))
                 (pv:draw-text (list (- xc 0.70) (- yc 0.40) z-rf) facing-tag 0.18 "PV_ANNOTATION" 3 0.0)
               )
             )
@@ -5083,7 +5095,7 @@
           (entdel ent)
         )
         ;; Collect original footprint entity
-        (setq orig-fp (cdr (assoc :bldg-ent (cdr s-rec))))
+        (setq orig-fp (cdr (assoc "BLDG-ENT" (cdr s-rec))))
         (if (and orig-fp (entget orig-fp))
           (if (not (member orig-fp b-footprints))
             (setq b-footprints (cons orig-fp b-footprints))
@@ -6712,7 +6724,12 @@
           (if (and in-boundary (not collides))
             (progn
               ;; Calculate 3D rooftop coordinates for all 4 module corners
-              (setq cur-bbox (if *PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX* bbox))
+              (setq cur-bbox (if (and *PV_CURRENT_BUILDING_BBOX* (listp *PV_CURRENT_BUILDING_BBOX*) (listp (car *PV_CURRENT_BUILDING_BBOX*)))
+                               *PV_CURRENT_BUILDING_BBOX*
+                               bbox))
+              (if (not (and (listp cur-bbox) (listp (car cur-bbox))))
+                (setq cur-bbox bbox)
+              )
               (setq z-clear (if (> *PV_MOD_CLEAR* 0.0) *PV_MOD_CLEAR* 0.10))
               (setq z1 (+ (pv:get-roof-z (nth 0 mod-corners) cur-bbox) z-clear)
                     z2 (+ (pv:get-roof-z (nth 1 mod-corners) cur-bbox) z-clear)
@@ -6942,13 +6959,13 @@
           (setq *PV_ROOF_SLOPE_POPULATE* slope-sel)
           (cond
             ((or (= slope-sel "South") (= slope-sel "South-Slope-Only"))
-             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "South")) b-list)))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc "FACING" (cdr (assoc e *PV_ROOF_SURFACES*)))) "South")) b-list)))
             ((or (= slope-sel "North") (= slope-sel "North-Slope-Only"))
-             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "North")) b-list)))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc "FACING" (cdr (assoc e *PV_ROOF_SURFACES*)))) "North")) b-list)))
             ((or (= slope-sel "West") (= slope-sel "West-Slope-Only"))
-             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "West")) b-list)))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc "FACING" (cdr (assoc e *PV_ROOF_SURFACES*)))) "West")) b-list)))
             ((or (= slope-sel "East") (= slope-sel "East-Slope-Only"))
-             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc :facing (cdr (assoc e *PV_ROOF_SURFACES*)))) "East")) b-list)))
+             (setq b-list (vl-remove-if-not '(lambda (e) (equal (cdr (assoc "FACING" (cdr (assoc e *PV_ROOF_SURFACES*)))) "East")) b-list)))
           )
         )
       )
@@ -6960,9 +6977,12 @@
           (progn
             (setq s-info (cdr (assoc ent *PV_ROOF_SURFACES*)))
             (setq bbox (pv:pts-bbox b-pts))
-            (setq *PV_CURRENT_BUILDING_BBOX* (if (and s-info (assoc :bldg-bbox s-info))
-                                               (cdr (assoc :bldg-bbox s-info))
+            (setq *PV_CURRENT_BUILDING_BBOX* (if (and s-info (assoc "BLDG-BBOX" s-info))
+                                               (cdr (assoc "BLDG-BBOX" s-info))
                                                bbox))
+            (if (not (and (listp *PV_CURRENT_BUILDING_BBOX*) (listp (car *PV_CURRENT_BUILDING_BBOX*))))
+              (setq *PV_CURRENT_BUILDING_BBOX* bbox)
+            )
             (setq x1 (caar bbox)    y1 (cadar bbox)
                   x2 (caadr bbox)   y2 (cadadr bbox)
                   xc (/ (+ x1 x2) 2.0) yc (/ (+ y1 y2) 2.0))
@@ -6975,13 +6995,13 @@
             (cond
               ;; Case 1: Designated Sloped Roof Surface
               (s-info
-               (setq z-name (cdr (assoc :name s-info)))
+               (setq z-name (cdr (assoc "NAME" s-info)))
                (if (null z-name) (setq z-name (strcat "Roof Surface RF-" (if (< r-idx 10) "0" "") (itoa r-idx))))
-               (if (assoc :azimuth s-info)
-                 (setq *PV_AZIMUTH* (cdr (assoc :azimuth s-info)))
+               (if (assoc "AZIMUTH" s-info)
+                 (setq *PV_AZIMUTH* (cdr (assoc "AZIMUTH" s-info)))
                )
-               (if (assoc :tilt s-info)
-                 (setq *PV_TILT* (cdr (assoc :tilt s-info)))
+               (if (assoc "TILT" s-info)
+                 (setq *PV_TILT* (cdr (assoc "TILT" s-info)))
                )
                (if (pv:is-metal-roof-p)
                  (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
@@ -7072,8 +7092,14 @@
                     z-name (cadr zn))
               (princ (strcat "\n[SolarPV] Populating array on " z-name " (Roof RF-" (if (< r-idx 10) "0" "") (itoa r-idx) ")..."))
               (setq res (pv:generate-grid z-poly))
-              (setq total-mods (+ total-mods (car res)))
-              (setq total-tbls (+ total-tbls (cadr res)))
+              (if (and res (listp res) (numberp (car res)))
+                (progn
+                  (setq total-mods (+ total-mods (car res)))
+                  (if (and (cdr res) (numberp (cadr res)))
+                    (setq total-tbls (+ total-tbls (cadr res)))
+                  )
+                )
+              )
             )
             (setq r-idx (1+ r-idx))
           )
