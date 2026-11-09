@@ -63,7 +63,8 @@
       *PV_DRAW_SHADOW*        1
       *PV_BOUNDARY_ENT*       nil
       *PV_BOUNDARY_LIST*      nil     ; list of multiple roof boundary entity names
-      *PV_ROOF_SURFACES*      nil     ; list of sloped roof surface records: (surf-ent ("NAME" . "") ("FACING" . "") ("AZIMUTH" . val) ("TILT" . val) ("BLDG-BBOX" . bbox) ("BLDG-ENT" . ent) ("PTS" . pts))
+      *PV_ROOF_SURFACES*      nil     ; list of sloped roof surface records: (surf-ent ("NAME" . "") ("FACING" . "") ("AZIMUTH" . val) ("TILT" . val) ("BLDG-BBOX" . bbox) ("BLDG-ENT" . ent) ("PTS" . pts) ("PLANE" . (A B C D)))
+      *PV_ACTIVE_SURFACE_PLANE* nil   ; analytical plane equation (A B C D) of current active roof surface
       *PV_ACTIVE_ROOF_IDX*    0       ; 0 = All roofs, 1..N = specific active roof index
       *PV_OBSTACLES*          nil     ; list of (ent ht shadow-poly obs-poly)
       *PV_PRE_SEL*            nil
@@ -223,6 +224,59 @@
 
 (defun acos (x)
   (- (/ pi 2.0) (asin x))
+)
+
+;;; --------------------------------------------------------------------------
+;;; Plane-equation helper (for 3D surfaces). Returns (A B C D) where
+;;;   A*x + B*y + C*z + D = 0  (upward normal, C > 0 always enforced)
+(defun pv:plane-from-3pts (p1 p2 p3 / v1x v1y v1z v2x v2y v2z a b c len d)
+  (setq v1x (- (car p2) (car p1))
+        v1y (- (cadr p2) (cadr p1))
+        v1z (- (caddr p2) (caddr p1))
+        v2x (- (car p3) (car p1))
+        v2y (- (cadr p3) (cadr p1))
+        v2z (- (caddr p3) (caddr p1)))
+  (setq a (- (* v1y v2z) (* v1z v2y))
+        b (- (* v1z v2x) (* v1x v2z))
+        c (- (* v1x v2y) (* v1y v2x)))
+  ;; Enforce upward normal (c > 0)
+  (if (< c 0.0)
+    (setq a (- a) b (- b) c (- c))
+  )
+  (setq len (sqrt (+ (* a a) (* b b) (* c c))))
+  (if (< len 1e-9)
+    nil
+    (progn
+      (setq a (/ a len) b (/ b len) c (/ c len))
+      (setq d (- (+ (* a (car p1)) (* b (cadr p1)) (* c (caddr p1)))))
+      (list a b c d)
+    )
+  )
+)
+
+;;; Given a plane (A B C D) and a 2D XY point, returns Z on the plane.
+;;; Z = -(A*x + B*y + D) / C
+(defun pv:plane-get-z (plane pt / a b c d)
+  (setq a (car plane) b (cadr plane) c (caddr plane) d (cadddr plane))
+  (if (< (abs c) 1e-9)
+    0.0
+    (- (/ (+ (* a (car pt)) (* b (cadr pt)) d) c))
+  )
+)
+
+;;; Compute plane from a list of 3D pts (uses first 3).
+;;; Returns nil if pts don't span a plane.
+(defun pv:plane-from-pts-list (pts / p1 p2 p3)
+  (if (and pts (>= (length pts) 3)
+           (caddr (car pts)))               ; must be 3D pts
+    (progn
+      (setq p1 (nth 0 pts)
+            p2 (nth 1 pts)
+            p3 (nth 2 pts))
+      (pv:plane-from-3pts p1 p2 p3)
+    )
+    nil
+  )
 )
 
 ;;; --------------------------------------------------------------------------
@@ -646,57 +700,66 @@
   )
 )
 
-;;; Computes roof surface elevation Z for any 2D point (x y) based on roof type, slope facing, and gable/hip apex
+;;; Computes roof surface elevation Z for any 2D point (x y) based on roof type, slope facing, and gable/hip apex.
+;;; If *PV_ACTIVE_SURFACE_PLANE* is set (a 3D surface plane equation), it uses that for precise Z.
 (defun pv:get-roof-z (pt bbox / x y x1 y1 x2 y2 xc yc span-x span-y h-ridge h-eaves dx dy d-norm)
   (setq x (car pt)
         y (cadr pt))
-  (if (not (and (listp bbox) (listp (car bbox))))
-    (setq bbox (pv:get-roof-bbox))
-  )
-  (if (and (listp bbox) (listp (car bbox)))
-    (setq x1 (caar bbox)
-          y1 (cadar bbox)
-          x2 (caadr bbox)
-          y2 (cadadr bbox)
-          xc (/ (+ x1 x2) 2.0)
-          yc (/ (+ y1 y2) 2.0)
-          span-x (max 0.1 (- x2 x1))
-          span-y (max 0.1 (- y2 y1)))
-    (setq x1 0.0 y1 0.0 x2 100.0 y2 100.0 xc 50.0 yc 50.0 span-x 100.0 span-y 100.0)
-  )
-  (setq h-ridge (if (> *PV_BLDG_RIDGE_HT* 0.0) *PV_BLDG_RIDGE_HT* 8.0)
-        h-eaves (if (> *PV_BLDG_EAVES_HT* 0.0) *PV_BLDG_EAVES_HT* 6.0))
-  (cond
-    ;; Flat RCC
-    ((or (= *PV_ROOF_TYPE* "Flat RCC Rooftop") (= *PV_ROOF_SLOPE_DIRS* 0))
-     h-eaves)
-    ;; 1 Direction (Monoslope / Shed)
-    ((= *PV_ROOF_SLOPE_DIRS* 1)
-     (cond
-       ((or (= *PV_ROOF_FACING* "South") (= *PV_ROOF_FACING* "S"))
-        (+ h-eaves (* (/ (max 0.0 (min span-y (- y y1))) span-y) (- h-ridge h-eaves))))
-       ((or (= *PV_ROOF_FACING* "North") (= *PV_ROOF_FACING* "N"))
-        (- h-ridge (* (/ (max 0.0 (min span-y (- y y1))) span-y) (- h-ridge h-eaves))))
-       ((or (= *PV_ROOF_FACING* "West") (= *PV_ROOF_FACING* "W"))
-        (+ h-eaves (* (/ (max 0.0 (min span-x (- x x1))) span-x) (- h-ridge h-eaves))))
-       (t ; East
-        (- h-ridge (* (/ (max 0.0 (min span-x (- x x1))) span-x) (- h-ridge h-eaves))))
-     ))
-    ;; 2 Directions (Dual-Pitch / Gable)
-    ((= *PV_ROOF_SLOPE_DIRS* 2)
-     (cond
-       ((or (= *PV_ROOF_FACING* "North & South") (= *PV_ROOF_FACING* "North-South") (= *PV_ROOF_FACING* "NS"))
-        (- h-ridge (* (/ (abs (- y yc)) (max 0.1 (/ span-y 2.0))) (- h-ridge h-eaves))))
-       (t ; East & West
-        (- h-ridge (* (/ (abs (- x xc)) (max 0.1 (/ span-x 2.0))) (- h-ridge h-eaves))))
-     ))
-    ;; 4 Directions (Hip Roof)
-    ((= *PV_ROOF_SLOPE_DIRS* 4)
-     (setq dx (/ (abs (- x xc)) (max 0.1 (/ span-x 2.0)))
-           dy (/ (abs (- y yc)) (max 0.1 (/ span-y 2.0)))
-           d-norm (min 1.0 (max dx dy)))
-     (- h-ridge (* d-norm (- h-ridge h-eaves))))
-    (t h-eaves)
+  ;; Use the active surface plane if available (most accurate for sloped metal roofs)
+  (if (and *PV_ACTIVE_SURFACE_PLANE*
+           (listp *PV_ACTIVE_SURFACE_PLANE*)
+           (= (length *PV_ACTIVE_SURFACE_PLANE*) 4))
+    (pv:plane-get-z *PV_ACTIVE_SURFACE_PLANE* pt)
+    (progn
+      (if (not (and (listp bbox) (listp (car bbox))))
+        (setq bbox (pv:get-roof-bbox))
+      )
+      (if (and (listp bbox) (listp (car bbox)))
+        (setq x1 (caar bbox)
+              y1 (cadar bbox)
+              x2 (caadr bbox)
+              y2 (cadadr bbox)
+              xc (/ (+ x1 x2) 2.0)
+              yc (/ (+ y1 y2) 2.0)
+              span-x (max 0.1 (- x2 x1))
+              span-y (max 0.1 (- y2 y1)))
+        (setq x1 0.0 y1 0.0 x2 100.0 y2 100.0 xc 50.0 yc 50.0 span-x 100.0 span-y 100.0)
+      )
+      (setq h-ridge (if (> *PV_BLDG_RIDGE_HT* 0.0) *PV_BLDG_RIDGE_HT* 8.0)
+            h-eaves (if (> *PV_BLDG_EAVES_HT* 0.0) *PV_BLDG_EAVES_HT* 6.0))
+      (cond
+        ;; Flat RCC
+        ((or (= *PV_ROOF_TYPE* "Flat RCC Rooftop") (= *PV_ROOF_SLOPE_DIRS* 0))
+         h-eaves)
+        ;; 1 Direction (Monoslope / Shed)
+        ((= *PV_ROOF_SLOPE_DIRS* 1)
+         (cond
+           ((or (= *PV_ROOF_FACING* "South") (= *PV_ROOF_FACING* "S"))
+            (+ h-eaves (* (/ (max 0.0 (min span-y (- y y1))) span-y) (- h-ridge h-eaves))))
+           ((or (= *PV_ROOF_FACING* "North") (= *PV_ROOF_FACING* "N"))
+            (- h-ridge (* (/ (max 0.0 (min span-y (- y y1))) span-y) (- h-ridge h-eaves))))
+           ((or (= *PV_ROOF_FACING* "West") (= *PV_ROOF_FACING* "W"))
+            (+ h-eaves (* (/ (max 0.0 (min span-x (- x x1))) span-x) (- h-ridge h-eaves))))
+           (t ; East
+            (- h-ridge (* (/ (max 0.0 (min span-x (- x x1))) span-x) (- h-ridge h-eaves))))
+         ))
+        ;; 2 Directions (Dual-Pitch / Gable)
+        ((= *PV_ROOF_SLOPE_DIRS* 2)
+         (cond
+           ((or (= *PV_ROOF_FACING* "North & South") (= *PV_ROOF_FACING* "North-South") (= *PV_ROOF_FACING* "NS"))
+            (- h-ridge (* (/ (abs (- y yc)) (max 0.1 (/ span-y 2.0))) (- h-ridge h-eaves))))
+           (t ; East & West
+            (- h-ridge (* (/ (abs (- x xc)) (max 0.1 (/ span-x 2.0))) (- h-ridge h-eaves))))
+         ))
+        ;; 4 Directions (Hip Roof)
+        ((= *PV_ROOF_SLOPE_DIRS* 4)
+         (setq dx (/ (abs (- x xc)) (max 0.1 (/ span-x 2.0)))
+               dy (/ (abs (- y yc)) (max 0.1 (/ span-y 2.0)))
+               d-norm (min 1.0 (max dx dy)))
+         (- h-ridge (* d-norm (- h-ridge h-eaves))))
+        (t h-eaves)
+      )
+    )
   )
 )
 
@@ -1022,9 +1085,11 @@
       (= *PV_ROOF_TYPE* "Sloped Metal Sheet Rooftop"))
 )
 
-(defun pv:register-roof-surface (pts name facing azimuth bldg-bbox b-ent / surf-ent)
+(defun pv:register-roof-surface (pts name facing azimuth bldg-bbox b-ent / surf-ent surf-plane)
   (pv:init-layers)
   (setq surf-ent (pv:draw-3d-poly pts "PV_BOUNDARY" 1 t))
+  ;; Compute analytical plane equation from 3D pts for precise Z lookup
+  (setq surf-plane (pv:plane-from-pts-list pts))
   (if surf-ent
     (setq *PV_ROOF_SURFACES*
       (cons (list surf-ent
@@ -1034,7 +1099,8 @@
                   (cons "TILT" (if (> *PV_ROOF_SLOPE* 0.0) *PV_ROOF_SLOPE* 0.0))
                   (cons "BLDG-BBOX" bldg-bbox)
                   (cons "BLDG-ENT" b-ent)
-                  (cons "PTS" pts))
+                  (cons "PTS" pts)
+                  (cons "PLANE" surf-plane))
             *PV_ROOF_SURFACES*))
   )
   surf-ent
@@ -6937,7 +7003,8 @@
       (pv:clear-layout)
       ;; 1. Check and verify that Shadow Map is drawn for all obstacles with height > 0
       (pv:ensure-all-obstacle-shadows)
-      (setq total-mods 0 total-tbls 0 *PV_ELEV_TOTAL_LEGS* 0)
+      (setq total-mods 0 total-tbls 0 *PV_ELEV_TOTAL_LEGS* 0
+            *PV_ACTIVE_SURFACE_PLANE* nil)
       
       ;; Determine roofs to populate based on *PV_ACTIVE_ROOF_IDX*
       (setq b-list
@@ -6983,6 +7050,11 @@
             (if (not (and (listp *PV_CURRENT_BUILDING_BBOX*) (listp (car *PV_CURRENT_BUILDING_BBOX*))))
               (setq *PV_CURRENT_BUILDING_BBOX* bbox)
             )
+            ;; Set active surface plane from stored PLANE equation for precise 3D Z on sloped surfaces
+            (setq *PV_ACTIVE_SURFACE_PLANE*
+              (if (and s-info (assoc "PLANE" s-info))
+                (cdr (assoc "PLANE" s-info))
+                nil))
             (setq x1 (caar bbox)    y1 (cadar bbox)
                   x2 (caadr bbox)   y2 (cadadr bbox)
                   xc (/ (+ x1 x2) 2.0) yc (/ (+ y1 y2) 2.0))
@@ -7090,6 +7162,12 @@
             (foreach zn sub-zones
               (setq z-poly (car zn)
                     z-name (cadr zn))
+              ;; Reset active surface plane per sub-zone (sub-zones from fallback have no plane)
+              ;; For s-info surfaces the PLANE is already set above in *PV_ACTIVE_SURFACE_PLANE*
+              ;; For fallback sub-zones (non-registered), clear the plane so bbox-based Z is used
+              (if (not s-info)
+                (setq *PV_ACTIVE_SURFACE_PLANE* nil)
+              )
               (princ (strcat "\n[SolarPV] Populating array on " z-name " (Roof RF-" (if (< r-idx 10) "0" "") (itoa r-idx) ")..."))
               (setq res (pv:generate-grid z-poly))
               (if (and res (listp res) (numberp (car res)))
@@ -7101,6 +7179,8 @@
                 )
               )
             )
+            ;; Clear active surface plane after each boundary to avoid leakage into next boundary
+            (setq *PV_ACTIVE_SURFACE_PLANE* nil)
             (setq r-idx (1+ r-idx))
           )
         )
