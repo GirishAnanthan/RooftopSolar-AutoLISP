@@ -41,7 +41,7 @@ solar_pv_control_center : dialog {
   : spacer { height = 0.5; }
 
   : row {
-    ;; COLUMN 1: SITE, ROOF & 3D BUILDING
+    // COLUMN 1: SITE, ROOF & 3D BUILDING
     : column {
       width = 28;
       : boxed_column {
@@ -67,7 +67,7 @@ solar_pv_control_center : dialog {
       }
     }
 
-    ;; COLUMN 2: ARRAY LAYOUT, SAFETY & EQUIPMENT
+    // COLUMN 2: ARRAY LAYOUT, SAFETY & EQUIPMENT
     : column {
       width = 28;
       : boxed_column {
@@ -95,7 +95,7 @@ solar_pv_control_center : dialog {
       }
     }
 
-    ;; COLUMN 3: ELECTRICAL BOS & DC STRINGING
+    // COLUMN 3: ELECTRICAL BOS & DC STRINGING
     : column {
       width = 28;
       : boxed_column {
@@ -122,7 +122,7 @@ solar_pv_control_center : dialog {
       }
     }
 
-    ;; COLUMN 4: EARTHING, SLD, REPORTS & CLEAR
+    // COLUMN 4: EARTHING, SLD, REPORTS & CLEAR
     : column {
       width = 28;
       : boxed_column {
