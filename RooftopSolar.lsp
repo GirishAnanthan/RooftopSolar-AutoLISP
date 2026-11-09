@@ -207,6 +207,10 @@
   )
 )
 
+(defun pv:tan (a)
+  (tan a)
+)
+
 (defun asin (x)
   (cond
     ((> x 1.0)  (/ pi 2.0))
@@ -1106,7 +1110,7 @@
                       *PV_ELEV_MIN_CLEAR*
                       (if (and *PV_MOD_CLEAR* (> *PV_MOD_CLEAR* 0.0)) *PV_MOD_CLEAR* 2.00)))
   (setq tilt-rad (dtr (if (> *PV_TILT* 0.0) *PV_TILT* 15.0)))
-  (setq s (pv:tan tilt-rad))
+  (setq s (tan tilt-rad))
   (if (null r-bbox) (setq r-bbox (if *PV_CURRENT_BUILDING_BBOX* *PV_CURRENT_BUILDING_BBOX* (pv:get-roof-bbox))))
   (if r-bbox
     (setq minx (caar r-bbox)
