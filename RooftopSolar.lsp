@@ -6205,7 +6205,7 @@
 ;;; --------------------------------------------------------------------------
 ;;; Interactive Pick Functions (Boundary & Obstacles)
 ;;; --------------------------------------------------------------------------
-(defun c:pv-pick-boundary (/ ss ent i ent-list has-face picked-list)
+(defun c:pv-pick-boundary (/ ss ent i ent-list has-face picked-list first-vals)
   (pv:init-layers)
   (princ "\nSelect Roof Face(s) or closed boundary polyline(s) for Solar PV Rooftop...")
   (setq ss nil)
@@ -6235,6 +6235,15 @@
               (setq *PV_BOUNDARY_LIST* picked-list
                     *PV_BOUNDARY_ENT* (car picked-list)
                     *PV_ACTIVE_ROOF_IDX* 0)
+              (if (setq first-vals (pv:get-active-surface-tilt-az))
+                (if (> (car first-vals) 0.5)
+                  (setq *PV_ROOF_TYPE*  "Metal Sheet Rooftop"
+                        *PV_MOUNT_OPT*  "Flush Mounted (Parallel to Roof)"
+                        *PV_TILT*       (car first-vals)
+                        *PV_AZIMUTH*    (cadr first-vals)
+                        *PV_ROOF_SLOPE* (car first-vals))
+                )
+              )
               (princ (strcat "\n[SolarPV] Registered " (itoa (length *PV_BOUNDARY_LIST*)) " 3D roof face(s) for module installation."))
               (c:pv-roof-number)
             )
@@ -7299,20 +7308,25 @@
               (s-info
                (setq z-name (cdr (assoc "NAME" s-info)))
                (if (null z-name) (setq z-name (strcat "Roof Surface RF-" (if (< r-idx 10) "0" "") (itoa r-idx))))
-               (if (and (assoc "FACING" s-info)
-                        (/= (cdr (assoc "FACING" s-info)) "Flat"))
+               ;; When Flush Mount on Metal Sheet OR sloped surface, Tilt Angle & Azimuth match selected surface
+               (if (or (and (pv:is-metal-roof-p) (wcmatch (strcase *PV_MOUNT_OPT*) "*FLUSH*"))
+                       (and (assoc "FACING" s-info) (/= (cdr (assoc "FACING" s-info)) "Flat")))
                  (progn
                    (if (assoc "AZIMUTH" s-info)
                      (setq *PV_AZIMUTH* (cdr (assoc "AZIMUTH" s-info)))
                    )
-                   (if (and (assoc "TILT" s-info) (> (cdr (assoc "TILT" s-info)) 0.5))
+                   (if (assoc "TILT" s-info)
                      (progn
                        (setq *PV_TILT* (cdr (assoc "TILT" s-info)))
                        (setq *PV_ROOF_SLOPE* *PV_TILT*)
-                       (if (not (pv:is-metal-roof-p))
-                         (setq *PV_ROOF_TYPE* "Metal Sheet Rooftop")
+                       (if (> *PV_TILT* 0.5)
+                         (progn
+                           (if (not (pv:is-metal-roof-p))
+                             (setq *PV_ROOF_TYPE* "Metal Sheet Rooftop")
+                           )
+                           (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
+                         )
                        )
-                       (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
                      )
                    )
                  )
@@ -7396,6 +7410,19 @@
               
               ;; Single Slope (Monoslope), 4 Directions (Hip), or Flat RCC
               (t
+               (if (and (pv:is-metal-roof-p) (wcmatch (strcase *PV_MOUNT_OPT*) "*FLUSH*"))
+                 (progn
+                   (setq *PV_ACTIVE_SURFACE_PLANE* (pv:plane-from-pts-list (pv:get-polyline-3d-pts ent)))
+                   (if *PV_ACTIVE_SURFACE_PLANE*
+                     (progn
+                       (setq slope-sel (pv:slope-from-plane *PV_ACTIVE_SURFACE_PLANE*))
+                       (setq *PV_TILT*       (car slope-sel)
+                             *PV_AZIMUTH*    (cadr slope-sel)
+                             *PV_ROOF_SLOPE* (car slope-sel))
+                     )
+                   )
+                 )
+               )
                (setq sub-zones (list (list b-pts (strcat *PV_ROOF_TYPE* " Plane"))))
               )
             )
@@ -7404,13 +7431,12 @@
             (foreach zn sub-zones
               (setq z-poly (car zn)
                     z-name (cadr zn))
-              ;; Reset active surface plane per sub-zone (sub-zones from fallback have no plane)
-              ;; For s-info surfaces the PLANE is already set above in *PV_ACTIVE_SURFACE_PLANE*
-              ;; For fallback sub-zones (non-registered), clear the plane so bbox-based Z is used
-              (if (not s-info)
+              ;; Reset active surface plane only for non-plane fallback sub-zones
+              (if (and (not s-info) (not (and (pv:is-metal-roof-p) (wcmatch (strcase *PV_MOUNT_OPT*) "*FLUSH*"))))
                 (setq *PV_ACTIVE_SURFACE_PLANE* nil)
               )
-              (princ (strcat "\n[SolarPV] Populating array on " z-name " (Roof RF-" (if (< r-idx 10) "0" "") (itoa r-idx) ")..."))
+              (princ (strcat "\n[SolarPV] Populating array on " z-name " (Roof RF-" (if (< r-idx 10) "0" "") (itoa r-idx)
+                             " | Tilt: " (rtos *PV_TILT* 2 1) " deg | Azimuth: " (rtos *PV_AZIMUTH* 2 1) " deg)..."))
               (setq res (pv:generate-grid z-poly))
               (if (and res (listp res) (numberp (car res)))
                 (progn
@@ -8412,19 +8438,130 @@
   (pv:update-inv-status-tile)
 )
 
+;;; Returns (tilt-deg azimuth-deg facing-str) for the active/selected roof surface, or nil if none.
+(defun pv:get-active-surface-tilt-az (/ surf-ent s-info s-tilt s-az s-facing pts-3d plane slope-info)
+  (setq surf-ent
+    (cond
+      ((and *PV_ACTIVE_ROOF_IDX* (> *PV_ACTIVE_ROOF_IDX* 0) *PV_BOUNDARY_LIST* (<= *PV_ACTIVE_ROOF_IDX* (length *PV_BOUNDARY_LIST*)))
+       (nth (1- *PV_ACTIVE_ROOF_IDX*) *PV_BOUNDARY_LIST*))
+      ((and *PV_BOUNDARY_ENT* (assoc *PV_BOUNDARY_ENT* *PV_ROOF_SURFACES*))
+       *PV_BOUNDARY_ENT*)
+      ((and *PV_BOUNDARY_LIST* (car *PV_BOUNDARY_LIST*))
+       (car *PV_BOUNDARY_LIST*))
+      (t nil)
+    )
+  )
+  (setq s-info (if surf-ent (cdr (assoc surf-ent *PV_ROOF_SURFACES*)) nil))
+  (if (and (null s-info) *PV_ROOF_SURFACES*)
+    (setq s-info (cdar *PV_ROOF_SURFACES*))
+  )
+  (cond
+    (s-info
+     (setq s-tilt   (if (assoc "TILT" s-info) (cdr (assoc "TILT" s-info)) nil)
+           s-az     (if (assoc "AZIMUTH" s-info) (cdr (assoc "AZIMUTH" s-info)) nil)
+           s-facing (if (assoc "FACING" s-info) (cdr (assoc "FACING" s-info)) "Flat"))
+     (if (and (assoc "PLANE" s-info) (cdr (assoc "PLANE" s-info)))
+       (progn
+         (setq slope-info (pv:slope-from-plane (cdr (assoc "PLANE" s-info))))
+         (if (null s-tilt) (setq s-tilt (car slope-info)))
+         (if (null s-az)   (setq s-az   (cadr slope-info)))
+       )
+     )
+     (if (and s-tilt s-az)
+       (list s-tilt s-az s-facing)
+       nil
+     )
+    )
+    ((and surf-ent (entget surf-ent))
+     (setq pts-3d (pv:get-polyline-3d-pts surf-ent))
+     (if (and pts-3d (>= (length pts-3d) 3))
+       (progn
+         (setq plane (pv:plane-from-pts-list pts-3d))
+         (if plane (pv:slope-from-plane plane) nil)
+       )
+       nil
+     )
+    )
+    (t nil)
+  )
+)
+
+;;; Synchronizes Tilt Angle & Azimuth (globals + DCL tiles) to the selected surface
+;;; when Metal Sheet Rooftop + Flush Mounted (Parallel to Roof) is active.
+(defun pv:sync-flush-mount-from-surface (/ surf-vals)
+  (setq surf-vals (pv:get-active-surface-tilt-az))
+  (cond
+    (surf-vals
+     (setq *PV_TILT*       (car surf-vals)
+           *PV_AZIMUTH*    (cadr surf-vals)
+           *PV_ROOF_SLOPE* (car surf-vals))
+     (if (get_tile "tilt_angle")    (set_tile "tilt_angle"    (rtos *PV_TILT* 2 1)))
+     (if (get_tile "azimuth_angle") (set_tile "azimuth_angle" (rtos *PV_AZIMUTH* 2 1)))
+     (if (get_tile "roof_slope")    (set_tile "roof_slope"    (rtos *PV_ROOF_SLOPE* 2 1)))
+     ;; Lock manual Tilt & Azimuth inputs while Flush Mount mirrors the selected surface
+     (if (get_tile "tilt_angle")    (mode_tile "tilt_angle" 1))
+     (if (get_tile "azimuth_angle") (mode_tile "azimuth_angle" 1))
+     (if (get_tile "status_bar")
+       (set_tile "status_bar"
+         (strcat "Flush Mount active: Tilt (" (rtos *PV_TILT* 2 1) " deg) & Azimuth ("
+                 (rtos *PV_AZIMUTH* 2 1) " deg) synced to selected roof surface."))
+     )
+    )
+    (t
+     (if (and *PV_ROOF_SLOPE* (> *PV_ROOF_SLOPE* 0.0))
+       (progn
+         (setq *PV_TILT* *PV_ROOF_SLOPE*)
+         (if (get_tile "tilt_angle") (set_tile "tilt_angle" (rtos *PV_TILT* 2 1)))
+       )
+     )
+     (if (get_tile "tilt_angle")    (mode_tile "tilt_angle" 0))
+     (if (get_tile "azimuth_angle") (mode_tile "azimuth_angle" 0))
+     (if (get_tile "status_bar")
+       (set_tile "status_bar"
+         "Flush Mount selected: Tilt & Azimuth will match the selected surface.")
+     )
+    )
+  )
+)
+
+(defun pv:on-mount-option (/ rt m-opt)
+  (setq rt    (get_tile "roof_type")
+        m-opt (get_tile "mount_option"))
+  (setq *PV_MOUNT_OPT*
+    (cond
+      ((= m-opt "1") "Flush Mounted (Parallel to Roof)")
+      ((= m-opt "2") "Elevated Tilted Legs")
+      (t             "Tilted on MMS Structures")
+    )
+  )
+  (if (and (= rt "1") (= m-opt "1"))
+    (pv:sync-flush-mount-from-surface)
+    (progn
+      (if (get_tile "tilt_angle")    (mode_tile "tilt_angle" 0))
+      (if (get_tile "azimuth_angle") (mode_tile "azimuth_angle" 0))
+    )
+  )
+)
+
 (defun pv:on-roof-type ()
   (if (= (get_tile "roof_type") "1")
     (progn
-      (if (get_tile "mount_option") (set_tile "mount_option" "1"))
-      (if (get_tile "tilt_angle")   (set_tile "tilt_angle" "5.0"))
-      (if (get_tile "row_pitch")    (set_tile "row_pitch" (rtos (+ *PV_MOD_LEN* 0.20) 2 2)))
+      (setq *PV_ROOF_TYPE* "Metal Sheet Rooftop")
+      (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
+      (if (get_tile "mount_option")   (set_tile "mount_option" "1"))
+      (if (get_tile "row_pitch")      (set_tile "row_pitch" (rtos (+ *PV_MOD_LEN* 0.20) 2 2)))
       (if (get_tile "parapet_height") (mode_tile "parapet_height" 1))
       (if (get_tile "parapet_thick")  (mode_tile "parapet_thick" 1))
+      (pv:sync-flush-mount-from-surface)
     )
     (progn
-      (if (get_tile "mount_option") (set_tile "mount_option" "0"))
-      (if (get_tile "tilt_angle")   (set_tile "tilt_angle" "15.0"))
-      (if (get_tile "row_pitch")    (set_tile "row_pitch" "2.80"))
+      (setq *PV_ROOF_TYPE* "Flat RCC Rooftop")
+      (setq *PV_MOUNT_OPT* "Tilted on MMS Structures")
+      (if (get_tile "mount_option")   (set_tile "mount_option" "0"))
+      (if (get_tile "tilt_angle")     (mode_tile "tilt_angle" 0))
+      (if (get_tile "azimuth_angle")  (mode_tile "azimuth_angle" 0))
+      (if (get_tile "tilt_angle")     (set_tile "tilt_angle" "15.0"))
+      (if (get_tile "row_pitch")      (set_tile "row_pitch" "2.80"))
       (if (get_tile "parapet_height") (mode_tile "parapet_height" 0))
       (if (get_tile "parapet_thick")  (mode_tile "parapet_thick" 0))
     )
@@ -8496,6 +8633,9 @@
       (set_tile "lon_val"         (rtos *PV_LON* 2 4))
       (set_tile "tilt_angle"      (rtos *PV_TILT* 2 1))
       (set_tile "azimuth_angle"   (rtos *PV_AZIMUTH* 2 1))
+      (if (and (pv:is-metal-roof-p) (wcmatch (strcase *PV_MOUNT_OPT*) "*FLUSH*"))
+        (pv:sync-flush-mount-from-surface)
+      )
       ;; Indian Regulatory & Structural Parameters
       (if (get_tile "sanctioned_load_kw")
         (set_tile "sanctioned_load_kw" (rtos (if (and (boundp '*PV_SANCTIONED_LOAD*) *PV_SANCTIONED_LOAD*) *PV_SANCTIONED_LOAD* 25.0) 2 1))
@@ -8757,6 +8897,7 @@
     ((= tab-name "tab_site_roof")
       (action_tile "btn_next_tab" "(pv:save-tab-values *PV_CURRENT_TAB*) (setq *PV_CURRENT_TAB* \"tab_equipment\") (done_dialog 100)")
       (action_tile "roof_type"    "(pv:on-roof-type)")
+      (action_tile "mount_option" "(pv:on-mount-option)")
       (action_tile "layout_mode"
         "(if (= (get_tile \"layout_mode\") \"1\")
            (progn
@@ -8902,6 +9043,9 @@
       (if (get_tile "target_kw")       (setq *PV_TARGET_KW* (atof (get_tile "target_kw"))))
       (if (get_tile "roof_setback")    (setq *PV_SETBACK* (atof (get_tile "roof_setback"))))
       (if (get_tile "roof_slope")      (setq *PV_ROOF_SLOPE* (atof (get_tile "roof_slope"))))
+      (if (and (pv:is-metal-roof-p) (wcmatch (strcase *PV_MOUNT_OPT*) "*FLUSH*") (pv:get-active-surface-tilt-az))
+        (pv:sync-flush-mount-from-surface)
+      )
       (if (get_tile "mod_clearance")   (setq *PV_MOD_CLEAR* (atof (get_tile "mod_clearance"))))
       (if (get_tile "pr_val")          (setq *PV_PR* (atof (get_tile "pr_val"))))
       (if (and (get_tile "bldg_height") (> (atof (get_tile "bldg_height")) 0.0))
@@ -9182,6 +9326,9 @@
   (set_tile "mod_wid"         (rtos *PV_MOD_WID* 2 3))
   (set_tile "tilt_angle"      (rtos *PV_TILT* 2 1))
   (set_tile "azimuth_angle"   (rtos *PV_AZIMUTH* 2 1))
+  (if (and (pv:is-metal-roof-p) (wcmatch (strcase *PV_MOUNT_OPT*) "*FLUSH*"))
+    (pv:sync-flush-mount-from-surface)
+  )
   (set_tile "table_cols"      (itoa *PV_TABLE_COLS*))
   (set_tile "table_rows"      (itoa *PV_TABLE_ROWS*))
   (set_tile "row_pitch"       (rtos *PV_PITCH* 2 2))
@@ -9224,6 +9371,7 @@
   (action_tile "mod_select"           "(pv:on-mod-select)")
   (action_tile "inv_select"           "(pv:on-inv-select)")
   (action_tile "roof_type"            "(pv:on-roof-type)")
+  (action_tile "mount_option"         "(pv:on-mount-option)")
   (action_tile "btn_auto_pitch"       "(pv:on-auto-pitch)")
   (action_tile "layout_mode"
     "(if (= (get_tile \"layout_mode\") \"1\")
