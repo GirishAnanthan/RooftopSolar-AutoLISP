@@ -264,16 +264,76 @@
   )
 )
 
-;;; Compute plane from a list of 3D pts (uses first 3).
+;;; Compute plane from a list of 3D pts (tries non-collinear triples).
 ;;; Returns nil if pts don't span a plane.
-(defun pv:plane-from-pts-list (pts / p1 p2 p3)
+(defun pv:plane-from-pts-list (pts / n i j p1 p2 p3 res)
   (if (and pts (>= (length pts) 3)
            (caddr (car pts)))               ; must be 3D pts
     (progn
-      (setq p1 (nth 0 pts)
-            p2 (nth 1 pts)
-            p3 (nth 2 pts))
-      (pv:plane-from-3pts p1 p2 p3)
+      (setq n (length pts)
+            p1 (nth 0 pts)
+            res nil
+            i 1)
+      (while (and (null res) (< i (1- n)))
+        (setq j (1+ i))
+        (while (and (null res) (< j n))
+          (setq p2 (nth i pts)
+                p3 (nth j pts))
+          (if (and (caddr p2) (caddr p3))
+            (setq res (pv:plane-from-3pts p1 p2 p3))
+          )
+          (setq j (1+ j))
+        )
+        (setq i (1+ i))
+      )
+      res
+    )
+    nil
+  )
+)
+
+;;; Computes (tilt-deg azimuth-deg facing-str) from analytical plane (A B C D).
+;;; Solar azimuth convention: 0=North (+Y), 90=East (+X), 180=South (-Y), 270=West (-X).
+(defun pv:slope-from-plane (plane / a b c len-xy tilt-deg cad-deg az-deg facing-str)
+  (if (and plane (listp plane) (= (length plane) 4))
+    (progn
+      (setq a (car plane)
+            b (cadr plane)
+            c (caddr plane))
+      (setq len-xy (sqrt (+ (* a a) (* b b))))
+      (setq tilt-deg (* (atan len-xy (max 1e-6 (abs c))) (/ 180.0 pi)))
+      (if (< len-xy 1e-4)
+        (progn
+          (setq az-deg (if *PV_AZIMUTH* *PV_AZIMUTH* 180.0))
+          (setq facing-str "Flat")
+        )
+        (progn
+          (setq cad-deg (* (atan b a) (/ 180.0 pi)))
+          (setq az-deg (rem (+ 450.0 (- cad-deg)) 360.0))
+          (cond
+            ((and (>= az-deg 135.0) (< az-deg 225.0)) (setq facing-str "South"))
+            ((or  (>= az-deg 315.0) (< az-deg 45.0))  (setq facing-str "North"))
+            ((and (>= az-deg 45.0)  (< az-deg 135.0)) (setq facing-str "East"))
+            (t                                        (setq facing-str "West"))
+          )
+        )
+      )
+      (list (atof (rtos tilt-deg 2 1)) (atof (rtos az-deg 2 1)) facing-str)
+    )
+    (list 0.0 (if *PV_AZIMUTH* *PV_AZIMUTH* 180.0) "Flat")
+  )
+)
+
+;;; Compute 2D centroid (cx cy) of a list of points
+(defun pv:poly-centroid-2d (pts / sx sy n)
+  (if (and pts (> (length pts) 0))
+    (progn
+      (setq sx 0.0 sy 0.0 n (float (length pts)))
+      (foreach p pts
+        (setq sx (+ sx (car p))
+              sy (+ sy (cadr p)))
+      )
+      (list (/ sx n) (/ sy n))
     )
     nil
   )
@@ -544,10 +604,13 @@
          )
          (reverse pts))
         ((= etype "3DFACE")
-         (list (list (cadr (assoc 10 elist)) (caddr (assoc 10 elist)))
-               (list (cadr (assoc 11 elist)) (caddr (assoc 11 elist)))
-               (list (cadr (assoc 12 elist)) (caddr (assoc 12 elist)))
-               (list (cadr (assoc 13 elist)) (caddr (assoc 13 elist)))))
+         (setq pts (list (list (cadr (assoc 10 elist)) (caddr (assoc 10 elist)))
+                         (list (cadr (assoc 11 elist)) (caddr (assoc 11 elist)))
+                         (list (cadr (assoc 12 elist)) (caddr (assoc 12 elist)))
+                         (list (cadr (assoc 13 elist)) (caddr (assoc 13 elist)))))
+         (if (equal (nth 2 pts) (nth 3 pts) 1e-4)
+           (list (nth 0 pts) (nth 1 pts) (nth 2 pts))
+           pts))
         (t nil)
       )
     )
@@ -583,10 +646,13 @@
          )
          (reverse pts))
         ((= etype "3DFACE")
-         (list (cdr (assoc 10 elist))
-               (cdr (assoc 11 elist))
-               (cdr (assoc 12 elist))
-               (cdr (assoc 13 elist))))
+         (setq pts (list (cdr (assoc 10 elist))
+                         (cdr (assoc 11 elist))
+                         (cdr (assoc 12 elist))
+                         (cdr (assoc 13 elist))))
+         (if (equal (nth 2 pts) (nth 3 pts) 1e-4)
+           (list (nth 0 pts) (nth 1 pts) (nth 2 pts))
+           pts))
         (t nil)
       )
     )
@@ -598,7 +664,7 @@
   (setq elist (entget ent))
   (setq etype (cdr (assoc 0 elist)))
   (cond
-    ((or (= etype "LWPOLYLINE") (= etype "POLYLINE"))
+    ((or (= etype "LWPOLYLINE") (= etype "POLYLINE") (= etype "3DFACE"))
       (pv:get-polyline-pts ent)
     )
     ((= etype "LINE")
@@ -6139,34 +6205,58 @@
 ;;; --------------------------------------------------------------------------
 ;;; Interactive Pick Functions (Boundary & Obstacles)
 ;;; --------------------------------------------------------------------------
-(defun c:pv-pick-boundary (/ ss ent i ent-list)
+(defun c:pv-pick-boundary (/ ss ent i ent-list has-face picked-list)
   (pv:init-layers)
-  (princ "\nSelect closed boundary polyline(s) for Solar PV Rooftop (single or multiple roofs)...")
+  (princ "\nSelect Roof Face(s) or closed boundary polyline(s) for Solar PV Rooftop...")
   (setq ss nil)
   (setq ss (ssget "_I"))
   (if (and (not ss) *PV_PRE_SEL*)
     (progn (setq ss *PV_PRE_SEL* *PV_PRE_SEL* nil))
   )
   (if (not ss)
-    (setq ss (ssget '((0 . "LWPOLYLINE,POLYLINE,REGION"))))
+    (setq ss (ssget '((0 . "3DFACE,LWPOLYLINE,POLYLINE,REGION"))))
   )
   (sssetfirst nil nil)
   (if (and ss (> (sslength ss) 0))
     (progn
-      (setq ent-list nil i 0)
+      ;; Detect if selection contains 3DFACE (already modeled roof faces)
+      (setq has-face nil i 0)
       (while (< i (sslength ss))
-        (setq ent (ssname ss i))
-        (vl-catch-all-apply 'vla-put-layer (list (vlax-ename->vla-object ent) "PV_BOUNDARY"))
-        (setq ent-list (cons ent ent-list))
+        (if (= (cdr (assoc 0 (entget (ssname ss i)))) "3DFACE")
+          (setq has-face t)
+        )
         (setq i (1+ i))
       )
-      (setq *PV_BOUNDARY_LIST* (reverse ent-list))
-      (setq *PV_BOUNDARY_ENT* (car *PV_BOUNDARY_LIST*))
-      (setq *PV_ACTIVE_ROOF_IDX* 0)
-      (princ (strcat "\n[SolarPV] Successfully selected " (itoa (length *PV_BOUNDARY_LIST*)) " rooftop boundary/roof(s) assigned to layer 'PV_BOUNDARY'."))
-      (c:pv-roof-number)
-      ;; Prompt user for Rooftop Type, Slopes (1/2/4 dirs), Facing Direction & Heights to create 3D Building Outlines
-      (pv:prompt-roof-type-and-build-3d)
+      (if has-face
+        (progn
+          (setq picked-list (pv:resolve-selected-faces ss))
+          (if picked-list
+            (progn
+              (setq *PV_BOUNDARY_LIST* picked-list
+                    *PV_BOUNDARY_ENT* (car picked-list)
+                    *PV_ACTIVE_ROOF_IDX* 0)
+              (princ (strcat "\n[SolarPV] Registered " (itoa (length *PV_BOUNDARY_LIST*)) " 3D roof face(s) for module installation."))
+              (c:pv-roof-number)
+            )
+          )
+        )
+        (progn
+          (setq ent-list nil i 0)
+          (while (< i (sslength ss))
+            (setq ent (ssname ss i))
+            (vl-catch-all-apply 'vla-put-layer (list (vlax-ename->vla-object ent) "PV_BOUNDARY"))
+            (setq ent-list (cons ent ent-list))
+            (setq i (1+ i))
+          )
+          (setq *PV_BOUNDARY_LIST* (reverse ent-list))
+          (setq *PV_BOUNDARY_ENT* (car *PV_BOUNDARY_LIST*))
+          (setq *PV_ACTIVE_ROOF_IDX* 0)
+          (princ (strcat "\n[SolarPV] Successfully selected " (itoa (length *PV_BOUNDARY_LIST*)) " rooftop boundary/roof(s) assigned to layer 'PV_BOUNDARY'."))
+          (c:pv-roof-number)
+          ;; Prompt user for Rooftop Type, Slopes (1/2/4 dirs), Facing Direction & Heights to create 3D Building Outlines
+          (pv:prompt-roof-type-and-build-3d)
+        )
+      )
     )
     (progn
       (if (setq ss (ssget "X" '((0 . "LWPOLYLINE,POLYLINE,REGION") (8 . "PV_BOUNDARY"))))
@@ -6966,8 +7056,123 @@
 
   (list total-mods total-tables *PV_WALKWAY_LENGTH*)
 )
-(defun pv:generate-layout (/ ss-bnd b-list ent b-pts res plant-kw ans total-mods total-tbls r-idx
-                             bbox x1 y1 x2 y2 xc yc ridge-sb eaves-sb slope-sel sub-zones
+
+;;; Matches a selected entity (such as a 3DFACE on PV_3D_ROOF_FACE or a polyline)
+;;; to an already-registered record in *PV_ROOF_SURFACES* using entity key or centroid+Z match.
+(defun pv:find-matching-roof-surface (ent pts-3d / c-new z-new s-rec s-ent s-pts s-c s-z matched)
+  (cond
+    ((and ent (assoc ent *PV_ROOF_SURFACES*) (entget ent)) ent)
+    (t
+     (setq c-new (pv:poly-centroid-2d pts-3d))
+     (if (and c-new pts-3d)
+       (progn
+         (setq z-new (/ (apply '+ (mapcar '(lambda (p) (if (caddr p) (caddr p) 0.0)) pts-3d))
+                        (float (length pts-3d))))
+         (setq matched nil)
+         (foreach s-rec *PV_ROOF_SURFACES*
+           (setq s-ent (car s-rec))
+           (if (and (null matched) s-ent (entget s-ent))
+             (progn
+               (setq s-pts (cdr (assoc "PTS" (cdr s-rec))))
+               (if (and s-pts (> (length s-pts) 0))
+                 (progn
+                   (setq s-c (pv:poly-centroid-2d s-pts))
+                   (setq s-z (/ (apply '+ (mapcar '(lambda (p) (if (caddr p) (caddr p) 0.0)) s-pts))
+                                (float (length s-pts))))
+                   (if (and s-c
+                            (< (distance c-new s-c) 0.15)
+                            (< (abs (- z-new s-z)) 0.15))
+                     (setq matched s-ent)
+                   )
+                 )
+               )
+             )
+           )
+         )
+         matched
+       )
+       nil
+     )
+    )
+  )
+)
+
+;;; Resolves an interactive ssget selection of roof faces (3DFACE, POLYLINE, LWPOLYLINE)
+;;; into boundary entity keys registered in *PV_ROOF_SURFACES* with exact 3D plane equations.
+(defun pv:resolve-selected-faces (ss / i ent match-ent pts-3d pts-2d bbox plane slope-info
+                                      tilt-deg az-deg facing-str surf-ent face-name out-list s-info idx-f)
+  (pv:init-layers)
+  (setq out-list nil i 0 idx-f 1)
+  (while (< i (sslength ss))
+    (setq ent (ssname ss i))
+    (setq pts-3d (pv:get-polyline-3d-pts ent))
+    (if (and pts-3d (>= (length pts-3d) 3))
+      (progn
+        (setq match-ent (pv:find-matching-roof-surface ent pts-3d))
+        (if match-ent
+          (progn
+            (if (not (member match-ent out-list))
+              (progn
+                (setq s-info (cdr (assoc match-ent *PV_ROOF_SURFACES*)))
+                (princ (strcat "\n  - Face " (itoa idx-f) ": "
+                               (if (and s-info (assoc "NAME" s-info)) (cdr (assoc "NAME" s-info)) "Registered Roof Surface")))
+                (setq out-list (cons match-ent out-list))
+                (setq idx-f (1+ idx-f))
+              )
+            )
+          )
+          (progn
+            (setq pts-2d (mapcar '(lambda (p) (list (car p) (cadr p))) pts-3d))
+            (if (and (> (length pts-2d) 3) (equal (car pts-2d) (last pts-2d) 1e-4))
+              (setq pts-2d (reverse (cdr (reverse pts-2d))))
+            )
+            (setq bbox (pv:pts-bbox pts-2d))
+            (setq plane (pv:plane-from-pts-list pts-3d))
+            (setq slope-info (pv:slope-from-plane plane)
+                  tilt-deg (car slope-info)
+                  az-deg (cadr slope-info)
+                  facing-str (caddr slope-info))
+            ;; Leave user's original 3DFACE untouched; create boundary outline on PV_BOUNDARY
+            (if (= (cdr (assoc 0 (entget ent))) "3DFACE")
+              (setq surf-ent (pv:draw-3d-poly pts-3d "PV_BOUNDARY" 1 t))
+              (progn
+                (setq surf-ent ent)
+                (vl-catch-all-apply 'vla-put-layer (list (vlax-ename->vla-object surf-ent) "PV_BOUNDARY"))
+              )
+            )
+            (if (> tilt-deg 1.0)
+              (setq face-name (strcat facing-str "-Facing Sloped Roof Face (" (rtos tilt-deg 2 1) " deg, Az " (rtos az-deg 2 0) " deg)"))
+              (setq face-name (strcat "Selected Flat Roof Face (Elev "
+                                      (rtos (if (caddr (car pts-3d)) (caddr (car pts-3d)) 0.0) 2 2) "m)")
+                    facing-str "Flat")
+            )
+            (setq *PV_ROOF_SURFACES*
+              (cons (list surf-ent
+                          (cons "NAME" face-name)
+                          (cons "FACING" facing-str)
+                          (cons "AZIMUTH" (if (> tilt-deg 1.0) az-deg *PV_AZIMUTH*))
+                          (cons "TILT" (if (> tilt-deg 1.0) tilt-deg 0.0))
+                          (cons "BLDG-BBOX" bbox)
+                          (cons "BLDG-ENT" ent)
+                          (cons "PTS" pts-3d)
+                          (cons "PLANE" plane))
+                    *PV_ROOF_SURFACES*))
+            (princ (strcat "\n  - Face " (itoa idx-f) ": " face-name))
+            (if (and surf-ent (not (member surf-ent out-list)))
+              (setq out-list (cons surf-ent out-list))
+            )
+            (setq idx-f (1+ idx-f))
+          )
+        )
+      )
+    )
+    (setq i (1+ i))
+  )
+  (reverse out-list)
+)
+
+(defun pv:generate-layout (/ ss-bnd ss-faces picked-list user-picked-faces b-list ent b-pts res plant-kw ans
+                             total-mods total-tbls r-idx bbox x1 y1 x2 y2 xc yc ridge-sb eaves-sb slope-sel sub-zones
                              south-poly north-poly west-poly east-poly zn z-poly z-name)
   (pv:init-layers)
   ;; Validate critical inputs
@@ -6978,7 +7183,32 @@
       (exit)
     )
   )
-  ;; Ensure roofs exist
+
+  ;; Ask user to click/select the exact Roof Face(s) / Surface(s) on which modules should be placed
+  (setq user-picked-faces nil
+        picked-list nil)
+  (princ "\n==========================================================================")
+  (princ "\n[SolarPV] Select the Roof Face(s) / Surface(s) on which modules should be installed.")
+  (princ "\n          [Click 3DFACE(s) or Roof Boundary polyline(s), or press ENTER to use active roof(s)]: ")
+  (setq ss-faces (ssget '((0 . "3DFACE,LWPOLYLINE,POLYLINE"))))
+  (if (and ss-faces (> (sslength ss-faces) 0))
+    (progn
+      (princ "\n[SolarPV] Resolving selected face(s):")
+      (setq picked-list (pv:resolve-selected-faces ss-faces))
+      (if picked-list
+        (progn
+          (setq user-picked-faces t)
+          (setq *PV_BOUNDARY_LIST* picked-list
+                *PV_BOUNDARY_ENT*  (car picked-list)
+                *PV_ACTIVE_ROOF_IDX* 0)
+          (c:pv-roof-number)
+        )
+        (princ "\n[SolarPV] No valid planar face or boundary found in selection. Checking active roofs...")
+      )
+    )
+  )
+
+  ;; Ensure roofs exist if user pressed ENTER without selecting faces
   (if (not *PV_BOUNDARY_LIST*)
     (if (setq ss-bnd (ssget "X" '((0 . "LWPOLYLINE,POLYLINE,REGION") (8 . "PV_BOUNDARY"))))
       (progn
@@ -7008,14 +7238,14 @@
       
       ;; Determine roofs to populate based on *PV_ACTIVE_ROOF_IDX*
       (setq b-list
-        (if (and (> *PV_ACTIVE_ROOF_IDX* 0) (<= *PV_ACTIVE_ROOF_IDX* (length *PV_BOUNDARY_LIST*)))
+        (if (and (not user-picked-faces) (> *PV_ACTIVE_ROOF_IDX* 0) (<= *PV_ACTIVE_ROOF_IDX* (length *PV_BOUNDARY_LIST*)))
           (list (nth (1- *PV_ACTIVE_ROOF_IDX*) *PV_BOUNDARY_LIST*))
           (if *PV_BOUNDARY_LIST* *PV_BOUNDARY_LIST* (list *PV_BOUNDARY_ENT*))
         )
       )
       
-      ;; If multiple sloped surfaces detected (e.g. Dual-Pitch Gable), allow user to filter slopes before layout
-      (if (and (= *PV_ROOF_SLOPE_DIRS* 2) (>= (length b-list) 2) (<= *PV_ACTIVE_ROOF_IDX* 0) *PV_ROOF_SURFACES*)
+      ;; If user did NOT manually pick faces and multiple sloped surfaces exist, allow keyword filter
+      (if (and (not user-picked-faces) (= *PV_ROOF_SLOPE_DIRS* 2) (>= (length b-list) 2) (<= *PV_ACTIVE_ROOF_IDX* 0) *PV_ROOF_SURFACES*)
         (progn
           (initget "Both South North Both-Slopes South-Slope-Only North-Slope-Only West East West-Slope-Only East-Slope-Only")
           (setq slope-sel (getkword (strcat "\nDual-Pitch Sloped Roof detected (" (itoa (length b-list)) " surfaces).\nSelect Slope(s) to populate [Both-Slopes / South-Slope-Only / North-Slope-Only / West-Slope-Only / East-Slope-Only] <"
@@ -7065,15 +7295,27 @@
             
             ;; Check if designated sloped roof surface or fallback to 2D footprint division
             (cond
-              ;; Case 1: Designated Sloped Roof Surface
+              ;; Case 1: Designated Sloped or Selected Roof Surface
               (s-info
                (setq z-name (cdr (assoc "NAME" s-info)))
                (if (null z-name) (setq z-name (strcat "Roof Surface RF-" (if (< r-idx 10) "0" "") (itoa r-idx))))
-               (if (assoc "AZIMUTH" s-info)
-                 (setq *PV_AZIMUTH* (cdr (assoc "AZIMUTH" s-info)))
-               )
-               (if (assoc "TILT" s-info)
-                 (setq *PV_TILT* (cdr (assoc "TILT" s-info)))
+               (if (and (assoc "FACING" s-info)
+                        (/= (cdr (assoc "FACING" s-info)) "Flat"))
+                 (progn
+                   (if (assoc "AZIMUTH" s-info)
+                     (setq *PV_AZIMUTH* (cdr (assoc "AZIMUTH" s-info)))
+                   )
+                   (if (and (assoc "TILT" s-info) (> (cdr (assoc "TILT" s-info)) 0.5))
+                     (progn
+                       (setq *PV_TILT* (cdr (assoc "TILT" s-info)))
+                       (setq *PV_ROOF_SLOPE* *PV_TILT*)
+                       (if (not (pv:is-metal-roof-p))
+                         (setq *PV_ROOF_TYPE* "Metal Sheet Rooftop")
+                       )
+                       (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
+                     )
+                   )
+                 )
                )
                (if (pv:is-metal-roof-p)
                  (setq *PV_MOUNT_OPT* "Flush Mounted (Parallel to Roof)")
